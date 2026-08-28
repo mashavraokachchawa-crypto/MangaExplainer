@@ -1,0 +1,122 @@
+input:
+  pdf: input/manga.pdf
+
+output:
+  dir: output
+  pages_dir: pages
+  panels_dir: panels
+  ocr_dir: ocr
+  analysis_dir: analysis
+  scenes_dir: scenes
+  script_dir: script
+
+images:
+  format: jpg
+  render_scale: 1.5
+  resolution: "1200x1800"
+  max_pixels: 2500000
+  jpeg_quality: 80
+
+panels:
+  strategy: gutter_flood
+  border_kernel: 3
+  close_kernel: 3
+  min_area: 3000
+  min_area_ratio: 0.0015
+  max_area_ratio: 0.95
+  min_side: 20
+  max_aspect_ratio: 4.0
+  min_confidence: 0.6
+  duplicate_iou: 0.5
+  drop_edge_touching: true
+  max_panels: 40
+  pad_pixels: 2
+  jpeg_quality: 85
+
+reading:
+  direction: rtl
+  row_overlap_ratio: 0.5
+  weights:
+    row_overlap: 2.0
+    horizontal: 1.5
+    vertical: 0.3
+    distance: 0.5
+    size: 0.0
+
+ocr:
+  engine: auto
+  language: eng+jpn
+  psm: 11
+  timeout_seconds: 30
+
+preprocess:
+  enabled: true
+  grayscale: true
+  contrast: 1.4
+  denoise: none
+  denoise_kernel: 3
+  resize_scale: 1.5
+  resize_max_pixels: 800000
+  threshold: none
+
+vlm:
+  enabled: true
+  provider: local
+  model: ""
+  device: cpu
+  max_image_size: 768
+  max_new_tokens: 256
+  timeout_seconds: 120
+
+llm:
+  enabled: true
+  provider: local
+  model: ""
+  device: cpu
+  max_context: 4096
+  max_new_tokens: 512
+  temperature: 0.7
+  timeout_seconds: 120
+
+scenes:
+  threshold: 0.45
+  weights:
+    location_change: 0.45
+    character_change: 0.55
+    event_change: 0.5
+    narrative_transition: 0.5
+  continuity:
+    character: 0.35
+    location: 0.35
+    action: 0.25
+    dialogue: 0.3
+    event: 0.3
+  transition_keywords:
+    - "meanwhile"
+    - "later"
+    - "suddenly"
+    - "翌日"
+    - "しかし"
+    - "そして"
+  summary_max_items: 6
+
+video:
+  resolution: "1920x1080"
+  fps: 30
+
+pipeline:
+  batch_size: 1
+  state:
+    dir: state
+  cache:
+    dir: state/cache
+
+memory:
+  guard_mb: 3072
+
+logging:
+  level: INFO
+  console_level: WARNING
+  log_dir: logs
+  max_bytes: 1048576
+  backup_count: 3
