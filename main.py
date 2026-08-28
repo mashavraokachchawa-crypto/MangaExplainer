@@ -658,6 +658,144 @@ def cmd_crops(cfg, page_num, scene_num, force):
     return 0
 
 
+def cmd_motion(cfg, page_num, scene_num, force, keyframes):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.motion import (
+        MotionError,
+        NoTimelineData,
+        NoPanelData,
+        NoImageData,
+        run_motion,
+        render_plan_path,
+    )
+    print("MangaExplainer - motion (Ken Burns + transitions, Tasks 17/18)")
+    if keyframes is None:
+        motion_cfg = getattr(cfg, "motion", None)
+        keyframes = int(motion_cfg.get("keyframes", 12)) if motion_cfg else 12
+    page_nums = [page_num] if page_num is not None else None
+    if page_num is not None and scene_num is not None:
+        # a single scene still requires a full timeline file; scene filter is
+        # handled at render time, so we plan the whole scene's file here.
+        pass
+    try:
+        result = run_motion(cfg, ROOT, page_nums=page_nums, force=force,
+                            keyframes=keyframes)
+    except NoTimelineData as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    except NoPanelData as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    except NoImageData as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    except MotionError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    print(f"  result         : {result['result']}")
+    print(f"  entries        : {result['entries']} shots")
+    print(f"  transitions    : {result['transitions']}")
+    print(f"  plan file      : {result['plan_file']}")
+    return 0
+
+
+def cmd_mix(cfg, section_seconds):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.audio_mix import MixError, run_mix
+    print("MangaExplainer - mix (narration + music + sfx, Task 21)")
+    if section_seconds is None:
+        render_cfg = getattr(cfg, "render", None)
+        section_seconds = float(render_cfg.get("section_seconds", 15)) \
+            if render_cfg else 15
+    try:
+        result = run_mix(cfg, ROOT, section_seconds=section_seconds)
+    except MixError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    print(f"  result         : {result['result']}")
+    print(f"  segments       : {result['segments']}")
+    print(f"  sample rate    : {result['sample_rate']}")
+    print(f"  duration       : {result['duration']}s")
+    print(f"  global peak    : {result['global_peak']}")
+    print(f"  normalize      : x{result['normalize_factor']}")
+    print(f"  background music : {'on' if result['music'] else 'off'}")
+    print(f"  sound effects    : {'on' if result['sfx'] else 'off'}")
+    print(f"  final mix      : {result['final_mix']}")
+    return 0
+
+
+def cmd_render(cfg, out_path, low_ram, fps):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.video_render import RenderError, render_video
+    print("MangaExplainer - render (video, Tasks 22/23)")
+    try:
+        result = render_video(cfg, ROOT, out_path=out_path, low_ram=low_ram,
+                              fps_override=fps)
+    except RenderError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    print(f"  result         : {result['result']}")
+    print(f"  resolution     : {result['resolution']}")
+    print(f"  fps            : {result['fps']}")
+    print(f"  duration       : {result['duration']}s")
+    print(f"  frames         : {result['frames']}")
+    print(f"  low RAM mode   : {'on' if result['low_ram'] else 'off'}")
+    print(f"  codec          : {result['codec']}")
+    print(f"  output         : {result['output']}")
+    return 0
+
+
+def cmd_export(cfg, low_ram, fps):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.export import ExportError, export_final
+    print("MangaExplainer - export (final MP4 + video_info.json, Task 24)")
+    try:
+        result = export_final(cfg, ROOT, low_ram=low_ram, fps_override=fps)
+    except ExportError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    print(f"  result         : {result['result']}")
+    print(f"  video          : {result['video']}")
+    print(f"  video_info     : {result['video_info']}")
+    info = result["info"]
+    print(f"  duration       : {info.get('duration')}s")
+    print(f"  resolution     : {info.get('resolution')}")
+    print(f"  fps            : {info.get('fps')}")
+    print(f"  video codec    : {info.get('video_codec')}")
+    print(f"  audio codec    : {info.get('audio_codec')}")
+    print(f"  file size      : {info.get('file_size')} bytes")
+    return 0
+
+
+def cmd_quality(cfg, video):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.quality_check import QualityCheckError, check_quality, report_path
+    print("MangaExplainer - quality-check (Task 25)")
+    try:
+        report = check_quality(cfg, ROOT, video_path=video)
+    except QualityCheckError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    status = report["status"]
+    print(f"  result         : {status.upper()}")
+    print(f"  errors         : {report.get('error_count', 0)}")
+    for c in report["checks"]:
+        mark = "PASS" if c["passed"] else ("FAIL" if c["critical"] else "warn")
+        print(f"    [{mark}] {c['check']:22s} {c['detail']}")
+    print(f"  report         : {report_path(ROOT)}")
+    # Task 25: an error must be clearly reported, not silently continued.
+    if status == "error":
+        return 1
+    if status == "warning":
+        return 0
+    return 0
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -864,6 +1002,86 @@ def build_parser():
     crops.add_argument(
         "--force", action="store_true", help="recompute even if already done"
     )
+    motion = sub.add_parser(
+        "motion",
+        parents=[common],
+        help="smooth Ken Burns camera path + short panel transitions -> "
+             "motion/render_plan.json (Tasks 17/18)",
+    )
+    motion.add_argument(
+        "--page", type=int, default=None,
+        help="1-based page number to include (default: all pages with a "
+             "shots timeline)",
+    )
+    motion.add_argument(
+        "--scene", type=int, default=None,
+        help="1-based scene number (informational; plan is per scene file)",
+    )
+    motion.add_argument(
+        "--keyframes", type=int, default=None,
+        help="keyframes for the smooth motion path (default: config "
+             "motion.keyframes)",
+    )
+    motion.add_argument(
+        "--force", action="store_true", help="regenerate even if the plan "
+                                             "already exists",
+    )
+    mix = sub.add_parser(
+        "mix",
+        parents=[common],
+        help="mix narration + optional music + SFX into "
+             "audio/final_mix.wav (Task 21)",
+    )
+    mix.add_argument(
+        "--section-seconds", type=float, default=None, metavar="SEC",
+        help="mix section size in seconds (bounds RAM; default config "
+             "render.section_seconds)",
+    )
+    render = sub.add_parser(
+        "render",
+        parents=[common],
+        help="render the final video from panels + motion + transitions + "
+             "final audio (Tasks 22/23)",
+    )
+    render.add_argument(
+        "--out", metavar="PATH", default=None,
+        help="output video path (default: output/MangaExplainer_video.mp4)",
+    )
+    render.add_argument(
+        "--low-ram", action="store_true", default=None, help=argparse.SUPPRESS,
+    )
+    render.add_argument(
+        "--no-low-ram", action="store_false", dest="low_ram", default=None,
+        help="disable LOW_RAM_MODE (process more freely)",
+    )
+    render.add_argument(
+        "--fps", type=float, default=None,
+        help="override frames per second (default: config video.fps)",
+    )
+    export_ = sub.add_parser(
+        "export",
+        parents=[common],
+        help="export the final MP4 + output/video_info.json "
+             "(H.264 + AAC, Task 24)",
+    )
+    export_.add_argument(
+        "--fps", type=float, default=None,
+        help="override frames per second (default: config video.fps)",
+    )
+    export_.add_argument(
+        "--no-low-ram", action="store_false", dest="low_ram", default=None,
+        help="disable LOW_RAM_MODE",
+    )
+    quality = sub.add_parser(
+        "quality-check",
+        parents=[common],
+        help="verify output/final_video.mp4 -> output/quality_report.json "
+             "(Task 25)",
+    )
+    quality.add_argument(
+        "--video", metavar="PATH", default=None,
+        help="video to check (default: output/final_video.mp4)",
+    )
     return parser
 
 
@@ -904,6 +1122,17 @@ def main(argv=None):
         return cmd_plan(cfg, args.page, args.scene, args.force)
     if args.command == "crops":
         return cmd_crops(cfg, args.page, args.scene, args.force)
+    if args.command == "motion":
+        return cmd_motion(cfg, args.page, args.scene, args.force,
+                          args.keyframes)
+    if args.command == "mix":
+        return cmd_mix(cfg, args.section_seconds)
+    if args.command == "render":
+        return cmd_render(cfg, args.out, args.low_ram, args.fps)
+    if args.command == "export":
+        return cmd_export(cfg, args.low_ram, args.fps)
+    if args.command == "quality-check":
+        return cmd_quality(cfg, args.video)
     commands = {
         "status": cmd_status,
         "resume": cmd_resume,
