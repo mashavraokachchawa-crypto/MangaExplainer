@@ -11,6 +11,7 @@ output:
   script_dir: script
   audio_dir: audio
   shots_dir: shots
+  crops_dir: crops
 
 images:
   format: jpg
@@ -131,6 +132,16 @@ shots:
   max_shots_per_segment: 3
   zoom_in_end: 1.12
   zoom_out_end: 0.92
+
+crops:
+  resolution: "1280x720"
+  format: jpg
+  jpeg_quality: 90
+  safe_padding: 0.06
+  critical_weight: 0.6
+  min_blob_area: 80
+  max_regions: 24
+  debug: true
 
 pipeline:
   batch_size: 1

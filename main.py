@@ -19,6 +19,8 @@ Commands:
                                   synthesize narration audio for one scene
     python main.py plan --page N --scene M
                                   build the visual timeline for one scene
+    python main.py crops --page N --scene M
+                                  compute 16:9 cinematic crops for one scene
 """
 import argparse
 import sys
@@ -54,6 +56,7 @@ def ensure_dirs(cfg):
     paths.add(Path(cfg.output.script_dir))
     paths.add(Path(cfg.output.audio_dir))
     paths.add(Path(cfg.output.shots_dir))
+    paths.add(Path(cfg.output.crops_dir))
     for path in paths:
         path.mkdir(parents=True, exist_ok=True)
 
@@ -467,6 +470,46 @@ def cmd_plan(cfg, page_num, scene_num, force):
     return 0
 
 
+def cmd_crops(cfg, page_num, scene_num, force):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.crop_planner import CropPlanner
+    from state import State
+
+    state = State(STAGE_NAMES, cfg.pipeline.state.dir)
+    result = CropPlanner(cfg).run_scene(page_num, scene_num, state, force=force)
+    print("MangaExplainer - crops")
+    print(f"  page           : {result['page']}")
+    print(f"  scene          : {result['scene']}")
+    if result["result"] == "error":
+        print(f"  result         : ERROR - {result['message']}")
+        for item in result.get("shot_errors") or []:
+            print(f"    - {item}")
+        return 1
+    if result["result"] == "skipped":
+        print(f"  result         : skipped (already completed)")
+        print(f"  shots dir      : {result.get('shots_dir')}")
+        return 0
+    target = result.get("target") or {}
+    print(f"  result         : computed")
+    print(f"  scene id       : {result.get('scene_id')}")
+    print(f"  shots          : {result.get('shot_count')}")
+    print(f"  target frame   : {target.get('width')}x{target.get('height')} "
+          f"({target.get('aspect')})")
+    print(f"  shots dir      : {result.get('shots_dir')}")
+    print(f"  crops dir      : {result.get('crops_dir')}")
+    for entry in result.get("shots", []):
+        crop = entry.get("crop") or {}
+        mode = "LETTERBOX" if entry.get("letterbox") else "16:9     "
+        print(
+            f"    {entry['shot_id']} [{mode}] {entry['strategy']} "
+            f"{crop.get('width')}x{crop.get('height')} @({crop.get('x')},{crop.get('y')}) "
+            f"{entry['panel']} {entry['intent']} regions={entry.get('region_count')} -> "
+            f"{entry.get('image')}"
+        )
+    return 0
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -604,6 +647,20 @@ def build_parser():
     plan.add_argument(
         "--force", action="store_true", help="re-plan even if already done"
     )
+    crops = sub.add_parser(
+        "crops",
+        parents=[common],
+        help="compute 16:9 cinematic crops for ONE page scene",
+    )
+    crops.add_argument(
+        "--page", type=int, required=True, help="1-based page number"
+    )
+    crops.add_argument(
+        "--scene", type=int, required=True, help="1-based scene number"
+    )
+    crops.add_argument(
+        "--force", action="store_true", help="recompute even if already done"
+    )
     return parser
 
 
@@ -634,6 +691,8 @@ def main(argv=None):
         return cmd_audio(cfg, args.page, args.scene, args.force)
     if args.command == "plan":
         return cmd_plan(cfg, args.page, args.scene, args.force)
+    if args.command == "crops":
+        return cmd_crops(cfg, args.page, args.scene, args.force)
     commands = {
         "status": cmd_status,
         "resume": cmd_resume,

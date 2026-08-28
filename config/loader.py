@@ -13,7 +13,7 @@ import yaml
 
 DEFAULT_CONFIG = {
     "input": {"pdf": "input/manga.pdf"},
-    "output": {"dir": "output", "pages_dir": "pages", "panels_dir": "panels", "ocr_dir": "ocr", "analysis_dir": "analysis", "scenes_dir": "scenes", "script_dir": "script", "audio_dir": "audio", "shots_dir": "shots"},
+    "output": {"dir": "output", "pages_dir": "pages", "panels_dir": "panels", "ocr_dir": "ocr", "analysis_dir": "analysis", "scenes_dir": "scenes", "script_dir": "script", "audio_dir": "audio", "shots_dir": "shots", "crops_dir": "crops"},
     "images": {
         "format": "jpg",
         "render_scale": 1.5,
@@ -136,6 +136,16 @@ DEFAULT_CONFIG = {
         "zoom_in_end": 1.12,
         "zoom_out_end": 0.92,
     },
+    "crops": {
+        "resolution": "1280x720",
+        "format": "jpg",
+        "jpeg_quality": 90,
+        "safe_padding": 0.06,
+        "critical_weight": 0.6,
+        "min_blob_area": 80,
+        "max_regions": 24,
+        "debug": True,
+    },
     "pipeline": {
         "batch_size": 1,
         "state": {"dir": "state"},
@@ -162,6 +172,7 @@ _PATH_KEYS = (
     ("output", "script_dir"),
     ("output", "audio_dir"),
     ("output", "shots_dir"),
+    ("output", "crops_dir"),
     ("pipeline", "state", "dir"),
     ("pipeline", "cache", "dir"),
     ("logging", "log_dir"),

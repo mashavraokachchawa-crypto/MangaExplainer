@@ -109,6 +109,19 @@ def test_shots_defaults_available():
     assert cfg.shots.zoom_out_end == 0.92
 
 
+def test_crops_defaults_available():
+    cfg = load_config(str(ROOT))
+    assert cfg.output.crops_dir == (ROOT / "crops")
+    assert cfg.crops.resolution == "1280x720"
+    assert cfg.crops.format == "jpg"
+    assert cfg.crops.jpeg_quality == 90
+    assert cfg.crops.safe_padding == 0.06
+    assert cfg.crops.critical_weight == 0.6
+    assert cfg.crops.min_blob_area == 80
+    assert cfg.crops.max_regions == 24
+    assert cfg.crops.debug is True
+
+
 def test_defaults_are_not_mutated():
     load_config(str(ROOT))
     assert DEFAULT_CONFIG["pipeline"]["batch_size"] == 1
