@@ -431,6 +431,154 @@ def cmd_audio(cfg, page_num, scene_num, force):
     return 0
 
 
+def cmd_tts(cfg, page_num, scene_num, force, segment):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.tts_runner import TtsRunner
+    from pipeline.pocket_tts import (
+        PocketTtsError,
+        PocketTtsUnavailable,
+        PocketTtsNotConfigured,
+    )
+    from state import State
+
+    state = State(STAGE_NAMES, cfg.pipeline.state.dir)
+    runner = TtsRunner(cfg)
+    print("MangaExplainer - tts (Pocket TTS narration)")
+    try:
+        result = runner.run_scene(
+            page_num, scene_num, state, force=force, segment=segment
+        )
+    except PocketTtsNotConfigured as exc:
+        print(f"  result         : ERROR - {exc}")
+        print("  enable tts.enabled=true (or use --yes) in config/config.yaml")
+        return 1
+    except PocketTtsUnavailable as exc:
+        print(f"  result         : ERROR - {exc}")
+        print("  install with: pip install pocket-tts   (CPU wheels)")
+        print("  for offline testing set tts.provider=mock in config/config.yaml")
+        return 1
+    except PocketTtsError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    except ValueError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+
+    print(f"  page           : {result['page']}")
+    print(f"  scene          : {result['scene']}")
+    print(f"  scene key      : {result['scene_key']}")
+    print(f"  result         : {result['summary']}")
+    print(f"  segments total : {result['segments_total']}")
+    print(f"  segments gen   : {result['segments_generated']}")
+    print(f"  segments skip  : {result['segments_skipped']}")
+    if result.get("warning"):
+        print(f"  warning        : {result['warning']}")
+    if result.get("conditioning"):
+        print(f"  conditioning   : {result['conditioning']}")
+    if result.get("conditioning_unavailable"):
+        print(f"  conditioning   : UNAVAILABLE -> {result['conditioning_unavailable']}")
+    print(f"  audio dir      : {result['audio_dir']}")
+    print(f"  timing json    : {result['timing_json']}")
+    return 0
+
+
+def cmd_tts_narration(cfg, script, out_dir, force, timing_only):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.tts_manifest import (
+        NarrationManifestRunner,
+        load_narration_segments,
+    )
+    from pipeline.pocket_tts import (
+        PocketTtsError,
+        PocketTtsUnavailable,
+        PocketTtsNotConfigured,
+    )
+
+    if script is None:
+        # discover the first narration script in the configured script_dir
+        candidates = sorted(Path(cfg.output.script_dir).glob("*_scene_*.json"))
+        if not candidates:
+            print("  result         : ERROR - no narration script found; pass "
+                  "--script PATH")
+            return 1
+        script = str(candidates[0])
+    script = Path(script)
+    if out_dir is None:
+        out_dir = str(Path(cfg.output.audio_dir))
+    out_dir = Path(out_dir)
+
+    print("MangaExplainer - tts-narration (Pocket TTS, Tasks 14/15)")
+    print(f"  script         : {script}")
+
+    runner = NarrationManifestRunner(cfg)
+
+    if timing_only:
+        # Task 15: recompute durations + start/end times from existing WAVs only.
+        try:
+            manifest = runner.finalize_timing(out_dir)
+        except Exception as exc:
+            print(f"  result         : ERROR - {exc}")
+            return 1
+        print(f"  result         : timing updated ({len(manifest)} segments)")
+    else:
+        # Task 14: generate one WAV per segment, then Task 15 timing.
+        try:
+            segments = load_narration_segments(script)
+        except Exception as exc:
+            print(f"  result         : ERROR - {exc}")
+            return 1
+        try:
+            manifest = runner.run(segments, out_dir, force=force)
+        except PocketTtsNotConfigured as exc:
+            print(f"  result         : ERROR - {exc}")
+            return 1
+        except PocketTtsUnavailable as exc:
+            print(f"  result         : ERROR - {exc}")
+            print("  install with: pip install pocket-tts")
+            return 1
+        except PocketTtsError as exc:
+            print(f"  result         : ERROR - {exc}")
+            return 1
+        print(f"  result         : generated ({len(manifest)} segments)")
+
+    print(f"  output dir     : {out_dir}")
+    print(f"  manifest       : {out_dir / 'manifest.json'}")
+    for entry in manifest:
+        print(f"    {entry['segment_id']:<10} "
+              f"dur={entry['duration']:.2f}s "
+              f"start={entry.get('start_time', 0):.2f} "
+              f"end={entry.get('end_time', 0):.2f}")
+    return 0
+
+
+def cmd_panels_prep(cfg, pages):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.panel_prep import (
+        PanelPrepError,
+        prepare_panels_manifest,
+        visuals_manifest_path,
+    )
+    print("MangaExplainer - panels-prep (Task 16)")
+    try:
+        manifest = prepare_panels_manifest(cfg, ROOT, page_nums=pages)
+    except PanelPrepError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    print(f"  result         : prepared ({len(manifest)} panels)")
+    print(f"  manifest       : {visuals_manifest_path(ROOT)}")
+    for entry in manifest:
+        segs = entry.get("narration_segments") or []
+        seg_ids = ",".join(s["segment_id"] for s in segs) or "-"
+        print(
+            f"    {entry['panel_id']:<10} {entry['width']}x{entry['height']} "
+            f"ar={entry['aspect_ratio']}\t-> {seg_ids}"
+        )
+    return 0
+
+
 def cmd_plan(cfg, page_num, scene_num, force):
     ensure_dirs(cfg)
     setup_logging(cfg)
@@ -633,6 +781,61 @@ def build_parser():
     audio.add_argument(
         "--force", action="store_true", help="regenerate audio even if already done"
     )
+    tts = sub.add_parser(
+        "tts",
+        parents=[common],
+        help="generate Pocket TTS narration audio (one segment at a time)",
+    )
+    tts.add_argument(
+        "--page", type=int, required=True, help="1-based page number"
+    )
+    tts.add_argument(
+        "--scene", type=int, required=True, help="1-based scene number"
+    )
+    tts.add_argument(
+        "--segment", type=int, default=None,
+        help="1-based segment index; regenerate only that segment"
+    )
+    tts.add_argument(
+        "--force", action="store_true",
+        help="regenerate audio even if a checkpoint says it is done"
+    )
+    tts_narration = sub.add_parser(
+        "tts-narration",
+        parents=[common],
+        help="generate flat audio/segment_NNN.wav + audio/manifest.json "
+             "(Tasks 14/15)",
+    )
+    tts_narration.add_argument(
+        "--script", metavar="PATH", default=None,
+        help="narration script JSON (default: first *_scene_*.json in "
+             "t.output.script_dir)",
+    )
+    tts_narration.add_argument(
+        "--out-dir", metavar="PATH", default=None,
+        help="output directory for segment_NNN.wav + manifest.json "
+             "(default: t.output.audio_dir)",
+    )
+    tts_narration.add_argument(
+        "--timing-only", action="store_true",
+        help="Task 15: recompute durations + start/end times from existing "
+             "WAVs without regenerating audio",
+    )
+    tts_narration.add_argument(
+        "--force", action="store_true",
+        help="regenerate audio even if segment WAVs already exist",
+    )
+    panels_prep = sub.add_parser(
+        "panels-prep",
+        parents=[common],
+        help="prepare each panel for video rendering -> "
+             "visuals/panels_manifest.json (Task 16)",
+    )
+    panels_prep.add_argument(
+        "--page", type=int, action="append", default=None,
+        help="1-based page number to include (repeatable); "
+             "default: auto-discover available pages",
+    )
     plan = sub.add_parser(
         "plan",
         parents=[common],
@@ -689,6 +892,14 @@ def main(argv=None):
         return cmd_script(cfg, args.page, args.scene, args.force)
     if args.command == "audio":
         return cmd_audio(cfg, args.page, args.scene, args.force)
+    if args.command == "tts":
+        return cmd_tts(cfg, args.page, args.scene, args.force, args.segment)
+    if args.command == "tts-narration":
+        return cmd_tts_narration(
+            cfg, args.script, args.out_dir, args.force, args.timing_only
+        )
+    if args.command == "panels-prep":
+        return cmd_panels_prep(cfg, args.page)
     if args.command == "plan":
         return cmd_plan(cfg, args.page, args.scene, args.force)
     if args.command == "crops":

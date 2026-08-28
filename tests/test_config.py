@@ -87,8 +87,10 @@ def test_tts_defaults_available():
     cfg = load_config(str(ROOT))
     assert cfg.tts.enabled is True
     assert cfg.tts.engine == "auto"
+    assert cfg.tts.provider == "pocket_tts"
     assert cfg.tts.voice == "en"
-    assert cfg.tts.sample_rate == 22050
+    assert cfg.tts.sample_rate == 24000
+    assert cfg.tts.format == "wav"
     assert cfg.tts.rate_wpm == 150
     assert cfg.tts.pitch_base == 50
     assert cfg.tts.timeout_seconds == 60

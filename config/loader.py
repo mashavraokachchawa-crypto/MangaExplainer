@@ -112,8 +112,11 @@ DEFAULT_CONFIG = {
     "tts": {
         "enabled": True,
         "engine": "auto",
+        "provider": "pocket_tts",
         "voice": "en",
-        "sample_rate": 22050,
+        "reference_audio": "input/voice_reference.mp3",
+        "sample_rate": 24000,
+        "format": "wav",
         "rate_wpm": 150,
         "pitch_base": 50,
         "timeout_seconds": 60,
@@ -163,6 +166,7 @@ DEFAULT_CONFIG = {
 
 _PATH_KEYS = (
     ("input", "pdf"),
+    ("tts", "reference_audio"),
     ("output", "dir"),
     ("output", "pages_dir"),
     ("output", "panels_dir"),
