@@ -94,6 +94,21 @@ def test_tts_defaults_available():
     assert cfg.tts.timeout_seconds == 60
 
 
+def test_shots_defaults_available():
+    cfg = load_config(str(ROOT))
+    assert cfg.output.shots_dir == (ROOT / "shots")
+    assert cfg.shots.match_weights.character == 0.25
+    assert cfg.shots.match_weights.story_relevance == 0.15
+    assert cfg.shots.review_threshold == 0.55
+    assert cfg.shots.tie_epsilon == 0.02
+    assert cfg.shots.direct_match_floor == 0.90
+    assert cfg.shots.secondary_panel_epsilon == 0.15
+    assert cfg.shots.long_segment_threshold == 9.0
+    assert cfg.shots.max_shots_per_segment == 3
+    assert cfg.shots.zoom_in_end == 1.12
+    assert cfg.shots.zoom_out_end == 0.92
+
+
 def test_defaults_are_not_mutated():
     load_config(str(ROOT))
     assert DEFAULT_CONFIG["pipeline"]["batch_size"] == 1

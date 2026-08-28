@@ -20,6 +20,7 @@ KNOWLEDGE_COMPLETED = "knowledge_completed"
 SCENES_COMPLETED = "scenes_completed"
 SCRIPT_COMPLETED = "script_completed"
 AUDIO_COMPLETED = "audio_completed"
+VISUAL_PLAN_COMPLETED = "visual_plan_completed"
 
 
 def _now():

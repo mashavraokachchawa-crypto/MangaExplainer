@@ -13,7 +13,7 @@ import yaml
 
 DEFAULT_CONFIG = {
     "input": {"pdf": "input/manga.pdf"},
-    "output": {"dir": "output", "pages_dir": "pages", "panels_dir": "panels", "ocr_dir": "ocr", "analysis_dir": "analysis", "scenes_dir": "scenes", "script_dir": "script", "audio_dir": "audio"},
+    "output": {"dir": "output", "pages_dir": "pages", "panels_dir": "panels", "ocr_dir": "ocr", "analysis_dir": "analysis", "scenes_dir": "scenes", "script_dir": "script", "audio_dir": "audio", "shots_dir": "shots"},
     "images": {
         "format": "jpg",
         "render_scale": 1.5,
@@ -118,6 +118,24 @@ DEFAULT_CONFIG = {
         "pitch_base": 50,
         "timeout_seconds": 60,
     },
+    "shots": {
+        "match_weights": {
+            "character": 0.25,
+            "action": 0.15,
+            "event": 0.20,
+            "object": 0.10,
+            "ocr": 0.15,
+            "story_relevance": 0.15,
+        },
+        "review_threshold": 0.55,
+        "tie_epsilon": 0.02,
+        "direct_match_floor": 0.90,
+        "secondary_panel_epsilon": 0.15,
+        "long_segment_threshold": 9.0,
+        "max_shots_per_segment": 3,
+        "zoom_in_end": 1.12,
+        "zoom_out_end": 0.92,
+    },
     "pipeline": {
         "batch_size": 1,
         "state": {"dir": "state"},
@@ -143,6 +161,7 @@ _PATH_KEYS = (
     ("output", "scenes_dir"),
     ("output", "script_dir"),
     ("output", "audio_dir"),
+    ("output", "shots_dir"),
     ("pipeline", "state", "dir"),
     ("pipeline", "cache", "dir"),
     ("logging", "log_dir"),

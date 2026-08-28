@@ -17,6 +17,8 @@ Commands:
                                   write narration script for one scene
     python main.py audio --page N --scene M
                                   synthesize narration audio for one scene
+    python main.py plan --page N --scene M
+                                  build the visual timeline for one scene
 """
 import argparse
 import sys
@@ -51,6 +53,7 @@ def ensure_dirs(cfg):
     paths.add(Path(cfg.output.scenes_dir))
     paths.add(Path(cfg.output.script_dir))
     paths.add(Path(cfg.output.audio_dir))
+    paths.add(Path(cfg.output.shots_dir))
     for path in paths:
         path.mkdir(parents=True, exist_ok=True)
 
@@ -425,6 +428,45 @@ def cmd_audio(cfg, page_num, scene_num, force):
     return 0
 
 
+def cmd_plan(cfg, page_num, scene_num, force):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.visual_planner import VisualPlanner
+    from state import State
+
+    state = State(STAGE_NAMES, cfg.pipeline.state.dir)
+    result = VisualPlanner(cfg).run_scene(page_num, scene_num, state, force=force)
+    print("MangaExplainer - plan")
+    print(f"  page           : {result['page']}")
+    print(f"  scene          : {result['scene']}")
+    if result["result"] == "error":
+        print(f"  result         : ERROR - {result['message']}")
+        return 1
+    if result["result"] == "skipped":
+        print(f"  result         : skipped (already completed)")
+        print(f"  timeline file  : {result.get('timeline_file')}")
+        return 0
+    print(f"  result         : planned")
+    print(f"  scene id       : {result.get('scene_id')}")
+    print(f"  shots          : {result.get('shot_count')}")
+    print(f"  review needed  : {result.get('review_count')} "
+          f"({', '.join(result.get('needs_review') or []) or 'none'})")
+    dropped = result.get("dropped_panel_ids") or []
+    if dropped:
+        print(f"  dropped panels : {', '.join(dropped)}")
+    print(f"  timeline file  : {result.get('timeline_file')}")
+    print(f"  review file    : {result.get('review_file')}")
+    for shot in result.get("shots", []):
+        marker = "REVIEW" if shot["needs_review"] else "    "
+        print(
+            f"    {shot['shot_id']} [{marker}] {shot['visual_intent']}/"
+            f"{shot['camera']['type']} {shot['estimated_duration']:.1f}s "
+            f"score={shot['match_score']:.2f} reuse={shot['reuse_count']} "
+            f"{shot['primary_panel']} -> {', '.join(shot['panel_ids'])}"
+        )
+    return 0
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -548,6 +590,20 @@ def build_parser():
     audio.add_argument(
         "--force", action="store_true", help="regenerate audio even if already done"
     )
+    plan = sub.add_parser(
+        "plan",
+        parents=[common],
+        help="build the visual timeline (script -> panels) for ONE page scene",
+    )
+    plan.add_argument(
+        "--page", type=int, required=True, help="1-based page number"
+    )
+    plan.add_argument(
+        "--scene", type=int, required=True, help="1-based scene number"
+    )
+    plan.add_argument(
+        "--force", action="store_true", help="re-plan even if already done"
+    )
     return parser
 
 
@@ -576,6 +632,8 @@ def main(argv=None):
         return cmd_script(cfg, args.page, args.scene, args.force)
     if args.command == "audio":
         return cmd_audio(cfg, args.page, args.scene, args.force)
+    if args.command == "plan":
+        return cmd_plan(cfg, args.page, args.scene, args.force)
     commands = {
         "status": cmd_status,
         "resume": cmd_resume,
