@@ -15,6 +15,8 @@ Commands:
                                   group the page's panels into scenes
     python main.py script --page N --scene M
                                   write narration script for one scene
+    python main.py audio --page N --scene M
+                                  synthesize narration audio for one scene
 """
 import argparse
 import sys
@@ -48,6 +50,7 @@ def ensure_dirs(cfg):
     paths.add(Path(cfg.output.analysis_dir))
     paths.add(Path(cfg.output.scenes_dir))
     paths.add(Path(cfg.output.script_dir))
+    paths.add(Path(cfg.output.audio_dir))
     for path in paths:
         path.mkdir(parents=True, exist_ok=True)
 
@@ -387,6 +390,41 @@ def cmd_script(cfg, page_num, scene_num, force):
     return 0
 
 
+def cmd_audio(cfg, page_num, scene_num, force):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.audio_generator import AudioGenerator
+    from state import State
+
+    state = State(STAGE_NAMES, cfg.pipeline.state.dir)
+    result = AudioGenerator(cfg).run_scene(page_num, scene_num, state, force=force)
+    print("MangaExplainer - audio")
+    print(f"  page           : {result['page']}")
+    print(f"  scene          : {result['scene']}")
+    if result["result"] == "error":
+        print(f"  result         : ERROR - {result['message']}")
+        return 1
+    if result["result"] == "skipped":
+        print(f"  result         : skipped (already completed)")
+        print(f"  audio file     : {result.get('audio_file')}")
+        return 0
+    print(f"  result         : generated")
+    print(f"  scene id       : {result.get('scene_id')}")
+    print(f"  engine         : {result.get('engine')}")
+    print(f"  segments       : {result.get('segment_count')}")
+    print(f"  total duration : {result.get('total_duration_ms')} ms "
+          f"({result.get('total_duration_ms', 0) / 1000.0:.1f} s) @ {result.get('sample_rate')} Hz")
+    print(f"  audio file     : {result.get('audio_file')}")
+    print(f"  manifest file  : {result.get('manifest_file')}")
+    for entry in result.get("segments", []):
+        print(
+            f"    {entry['segment_id']} [{entry['type']}] "
+            f"{entry['start_ms']}-{entry['end_ms']}ms "
+            f"({entry['duration_ms']}ms) {entry['text']!r}"
+        )
+    return 0
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -496,6 +534,20 @@ def build_parser():
     script.add_argument(
         "--force", action="store_true", help="rewrite script even if already done"
     )
+    audio = sub.add_parser(
+        "audio",
+        parents=[common],
+        help="synthesize narration audio for ONE page scene",
+    )
+    audio.add_argument(
+        "--page", type=int, required=True, help="1-based page number"
+    )
+    audio.add_argument(
+        "--scene", type=int, required=True, help="1-based scene number"
+    )
+    audio.add_argument(
+        "--force", action="store_true", help="regenerate audio even if already done"
+    )
     return parser
 
 
@@ -522,6 +574,8 @@ def main(argv=None):
         return cmd_scenes(cfg, args.page, args.force)
     if args.command == "script":
         return cmd_script(cfg, args.page, args.scene, args.force)
+    if args.command == "audio":
+        return cmd_audio(cfg, args.page, args.scene, args.force)
     commands = {
         "status": cmd_status,
         "resume": cmd_resume,

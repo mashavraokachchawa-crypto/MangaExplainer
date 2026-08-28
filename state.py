@@ -19,6 +19,7 @@ VLM_COMPLETED = "vlm_completed"
 KNOWLEDGE_COMPLETED = "knowledge_completed"
 SCENES_COMPLETED = "scenes_completed"
 SCRIPT_COMPLETED = "script_completed"
+AUDIO_COMPLETED = "audio_completed"
 
 
 def _now():

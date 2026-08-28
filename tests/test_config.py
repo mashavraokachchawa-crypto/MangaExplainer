@@ -72,6 +72,7 @@ def test_vlm_defaults_available():
 def test_llm_defaults_available():
     cfg = load_config(str(ROOT))
     assert cfg.output.script_dir == (ROOT / "script")
+    assert cfg.output.audio_dir == (ROOT / "audio")
     assert cfg.llm.enabled is True
     assert cfg.llm.provider == "local"
     assert cfg.llm.model == ""
@@ -80,6 +81,17 @@ def test_llm_defaults_available():
     assert cfg.llm.max_new_tokens == 512
     assert cfg.llm.temperature == 0.7
     assert cfg.llm.timeout_seconds == 120
+
+
+def test_tts_defaults_available():
+    cfg = load_config(str(ROOT))
+    assert cfg.tts.enabled is True
+    assert cfg.tts.engine == "auto"
+    assert cfg.tts.voice == "en"
+    assert cfg.tts.sample_rate == 22050
+    assert cfg.tts.rate_wpm == 150
+    assert cfg.tts.pitch_base == 50
+    assert cfg.tts.timeout_seconds == 60
 
 
 def test_defaults_are_not_mutated():

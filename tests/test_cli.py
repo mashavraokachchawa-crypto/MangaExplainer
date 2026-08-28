@@ -21,7 +21,7 @@ def run_cli(*args):
 def test_help_exits_zero_and_lists_commands():
     result = run_cli("--help")
     assert result.returncode == 0, result.stderr
-    for token in ("status", "resume", "clean-cache"):
+    for token in ("status", "resume", "clean-cache", "audio"):
         assert token in result.stdout
 
 

@@ -9,6 +9,7 @@ output:
   analysis_dir: analysis
   scenes_dir: scenes
   script_dir: script
+  audio_dir: audio
 
 images:
   format: jpg
@@ -103,6 +104,15 @@ scenes:
 video:
   resolution: "1920x1080"
   fps: 30
+
+tts:
+  enabled: true
+  engine: auto
+  voice: en
+  sample_rate: 22050
+  rate_wpm: 150
+  pitch_base: 50
+  timeout_seconds: 60
 
 pipeline:
   batch_size: 1

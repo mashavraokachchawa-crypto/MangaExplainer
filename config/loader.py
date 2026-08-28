@@ -13,7 +13,7 @@ import yaml
 
 DEFAULT_CONFIG = {
     "input": {"pdf": "input/manga.pdf"},
-    "output": {"dir": "output", "pages_dir": "pages", "panels_dir": "panels", "ocr_dir": "ocr", "analysis_dir": "analysis", "scenes_dir": "scenes", "script_dir": "script"},
+    "output": {"dir": "output", "pages_dir": "pages", "panels_dir": "panels", "ocr_dir": "ocr", "analysis_dir": "analysis", "scenes_dir": "scenes", "script_dir": "script", "audio_dir": "audio"},
     "images": {
         "format": "jpg",
         "render_scale": 1.5,
@@ -109,6 +109,15 @@ DEFAULT_CONFIG = {
         "summary_max_items": 6,
     },
     "video": {"resolution": "1920x1080", "fps": 30},
+    "tts": {
+        "enabled": True,
+        "engine": "auto",
+        "voice": "en",
+        "sample_rate": 22050,
+        "rate_wpm": 150,
+        "pitch_base": 50,
+        "timeout_seconds": 60,
+    },
     "pipeline": {
         "batch_size": 1,
         "state": {"dir": "state"},
@@ -133,6 +142,7 @@ _PATH_KEYS = (
     ("output", "analysis_dir"),
     ("output", "scenes_dir"),
     ("output", "script_dir"),
+    ("output", "audio_dir"),
     ("pipeline", "state", "dir"),
     ("pipeline", "cache", "dir"),
     ("logging", "log_dir"),
