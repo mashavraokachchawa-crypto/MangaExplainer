@@ -223,7 +223,8 @@ def test_ocr_engine_unavailable(tmp_path, monkeypatch):
     write_panel(make_cfg(tmp_path), kind="normal")
     cfg = make_cfg(tmp_path, ocr={"engine": "auto"})
     monkeypatch.setattr(shutil, "which", lambda *a, **k: None)
-    monkeypatch.setattr(ocr_provider.PaddleOCRProvider, "available", staticmethod(lambda: False))
+    monkeypatch.setattr(ocr_provider.MangaOCRProvider, "available", staticmethod(lambda cfg=None: False))
+    monkeypatch.setattr(ocr_provider.TesseractProvider, "available", staticmethod(lambda cfg=None: False))
     state = State(STAGE_NAMES, cfg.pipeline.state.dir)
     result = OcrProcessor(cfg).run_panel(1, 1, state)
     assert result["status"] == "error"
@@ -289,7 +290,8 @@ def test_classification_rules():
 
 def test_create_provider_raises_when_no_engine(tmp_path, monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda *a, **k: None)
-    monkeypatch.setattr(ocr_provider.PaddleOCRProvider, "available", staticmethod(lambda: False))
+    monkeypatch.setattr(ocr_provider.MangaOCRProvider, "available", staticmethod(lambda cfg=None: False))
+    monkeypatch.setattr(ocr_provider.TesseractProvider, "available", staticmethod(lambda cfg=None: False))
     cfg = make_cfg(tmp_path, ocr={"engine": "auto"})
     with pytest.raises(OCREngineUnavailable):
         create_provider(cfg)

@@ -14,7 +14,6 @@ REQUIRED_DIRS = [
     "scenes",
     "script",
     "audio",
-    "subtitles",
     "shots",
     "music",
     "output",

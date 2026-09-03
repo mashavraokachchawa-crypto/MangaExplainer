@@ -415,6 +415,18 @@ def create_pocket_tts_provider(cfg):
             "to generate narration audio."
         )
     provider = str(getattr(tts, "provider", "pocket_tts") or "pocket_tts").lower()
+    if provider == "pocket_server":
+        # HTTP (serve) path: the model runs in its own process, so the client
+        # needs nothing but stdlib. The runner is responsible for ensuring the
+        # server is up (it auto-starts per tts.server_auto_start); synth()
+        # raises a clear PocketTtsError if it is unreachable.
+        try:
+            from . import pocket_server
+        except Exception as exc:  # pragma: no cover - defensive
+            raise PocketTtsUnavailable(
+                f"pocket_server provider unavailable: {exc}"
+            ) from None
+        return pocket_server.PocketServerProvider(cfg)
     if provider in ("auto", "pocket_tts", "mock"):
         if provider in ("auto", "pocket_tts") and PocketTtsProvider.available():
             return PocketTtsProvider(cfg)
@@ -427,5 +439,6 @@ def create_pocket_tts_provider(cfg):
         LOG.warning("Pocket TTS not found; using mock TTS (sine tones, no speech).")
         return MockTtsProvider(cfg)
     raise PocketTtsError(
-        f"unknown tts.provider {provider!r} (expected pocket_tts, mock, or auto)"
+        f"unknown tts.provider {provider!r} "
+        f"(expected pocket_tts, pocket_server, mock, or auto)"
     )

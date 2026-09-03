@@ -40,7 +40,8 @@ CAMERAS = frozenset({
 })
 DEFAULT_CAMERA = "static"
 
-TRANSITIONS = frozenset({"cut", "fade", "dissolve"})
+# Transitions removed from the pipeline: panels are hard-cut only.
+TRANSITIONS = frozenset({"cut"})
 DEFAULT_TRANSITION = "cut"
 
 _NOISE_TOKENS = frozenset({"unknown", "none", "no", "undefined", "null"})
@@ -362,7 +363,7 @@ class VisualPlanner:
             duration = float(segment["estimated_seconds"])
             intent = valid_intent(segment.get("visual_intent"))
             camera = camera_plan(segment.get("camera"), self.cfg)
-            transition = valid_transition(segment.get("transition"))
+            transition = "cut"  # transitions removed: panels are hard-cut only
             pieces = self._pieces(
                 segment, primary, by_id[primary], duration, intent, camera, weights
             )

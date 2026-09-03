@@ -61,8 +61,9 @@ def test_vlm_defaults_available():
     cfg = load_config(str(ROOT))
     assert cfg.output.analysis_dir == (ROOT / "analysis")
     assert cfg.vlm.enabled is True
-    assert cfg.vlm.provider == "local"
-    assert cfg.vlm.model == ""
+    assert cfg.vlm.provider == "gemini"
+    assert cfg.vlm.gemini_model == "gemini-flash-lite-latest"
+    assert cfg.vlm.fallback == ""
     assert cfg.vlm.device == "cpu"
     assert cfg.vlm.max_image_size == 768
     assert cfg.vlm.max_new_tokens == 256
@@ -74,8 +75,8 @@ def test_llm_defaults_available():
     assert cfg.output.script_dir == (ROOT / "script")
     assert cfg.output.audio_dir == (ROOT / "audio")
     assert cfg.llm.enabled is True
-    assert cfg.llm.provider == "local"
-    assert cfg.llm.model == ""
+    assert cfg.llm.provider == "ollama"
+    assert cfg.llm.ollama_model == "qwen2.5:3b"
     assert cfg.llm.device == "cpu"
     assert cfg.llm.max_context == 4096
     assert cfg.llm.max_new_tokens == 512

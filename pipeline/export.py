@@ -139,13 +139,15 @@ def _parse_frame_rate(value):
 
 
 def export_final(cfg, root, out_path=None, low_ram=None, fps_override=None,
-                 cleanup=True):
+                 cleanup=True, on_progress=None):
     """Render the final MP4 (H.264 + AAC) and write output/video_info.json.
 
     Delegates to the Task 22/23 renderer but pins the codecs and the output
     path to output/final_video.mp4, then records the probe info. Temp files
     are removed automatically by the renderer; this stage only leaves the two
     deliverables in output/.
+
+    on_progress: optional callable(done, total) forwarded to the renderer.
     """
     from .video_render import render_video
     root = Path(root)
@@ -153,7 +155,8 @@ def export_final(cfg, root, out_path=None, low_ram=None, fps_override=None,
     try:
         result = render_video(cfg, root, out_path=target, low_ram=low_ram,
                               cleanup=cleanup, codec=EXPORT_CODEC,
-                              fps_override=fps_override)
+                              fps_override=fps_override,
+                              on_progress=on_progress)
     except Exception as exc:
         raise ExportError(f"render failed during export: {exc}") from exc
 

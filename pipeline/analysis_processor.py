@@ -122,11 +122,14 @@ class AnalysisProcessor:
             if state and not force and self._done(state, key):
                 return self._skip(page, panel, str(out_file))
 
+            from .panel_clean import clean_panel_source
+            read_file = clean_panel_source(cfg, page, panel) or panel_file
+
             provider = self._resolve_provider(cfg, page, panel)
             if isinstance(provider, dict):
                 return provider
 
-            image = self._load_image(panel_file)
+            image = self._load_image(read_file)
             if image is None:
                 return self._error(page, panel, "invalid panel image")
             del image
@@ -138,7 +141,7 @@ class AnalysisProcessor:
             model_name = getattr(provider, "model", "") or provider.name
             try:
                 raw = provider.analyze_image(
-                    str(panel_file), prompt, timeout=int(cfg.vlm.timeout_seconds)
+                    str(read_file), prompt, timeout=int(cfg.vlm.timeout_seconds)
                 )
             except MemoryError:
                 return self._error(page, panel, "insufficient memory during VLM inference")
@@ -181,7 +184,7 @@ class AnalysisProcessor:
                 )
 
             self._write_analysis(
-                out_file, page, panel, str(panel_file),
+                out_file, page, panel, str(read_file),
                 provider.name, model_name, analysis,
             )
             if state:

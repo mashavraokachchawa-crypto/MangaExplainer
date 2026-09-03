@@ -1,0 +1,2305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MangaExplainer</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#ffffff; --inset:#f3f5f8;
+    --line:#e3e8ee; --line-strong:#d3dae3;
+    --ink:#17212f; --ink-2:#4b5565; --ink-3:#667085;
+    --accent:#2b5ce6; --accent-ink:#ffffff; --accent-soft:#edf3ff;
+    --ok:#15803d; --ok-soft:#e8f6ee;
+    --warn:#b45309; --warn-soft:#fdf3e2;
+    --err:#c0392b; --err-soft:#fbeeec;
+    --shadow:0 1px 2px rgba(15,23,42,.05),0 12px 28px rgba(15,23,42,.07);
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    font-size:15px; line-height:1.5;
+  }
+  svg{display:block}
+  .hide{display:none !important}
+
+  /* ---------- top bar ---------- */
+  header.top{
+    background:var(--surface); border-bottom:1px solid var(--line);
+    position:sticky; top:0; z-index:20;
+  }
+  .top-inner{
+    max-width:960px; margin:0 auto; padding:14px 22px;
+    display:flex; align-items:center; gap:14px;
+  }
+  .brand{display:flex; align-items:center; gap:11px; min-width:0}
+  .mark{
+    width:34px; height:34px; border-radius:9px; flex:none;
+    background:var(--accent); color:#fff;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 1px 2px rgba(15,23,42,.18);
+  }
+  .brand h1{font-size:16.5px; margin:0; letter-spacing:-.01em}
+  .brand p{margin:0; font-size:12.5px; color:var(--ink-3)}
+  .topmeta{margin-left:auto; display:flex; gap:8px; flex-wrap:wrap}
+  .pill{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12px; font-weight:600; padding:5px 11px; border-radius:999px;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink-2);
+  }
+  .pill.ok{color:var(--ok); border-color:#bfe3cc; background:var(--ok-soft)}
+  .pill.busy{color:var(--warn); border-color:#efd9ae; background:var(--warn-soft)}
+  .pill .d{width:7px; height:7px; border-radius:50%; background:currentColor}
+  .pill.busy .d{animation:pulse 1.3s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+
+  /* ---------- layout ---------- */
+  main{max-width:960px; margin:0 auto; padding:26px 22px 70px}
+  .specline{
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    font-size:12.5px; color:var(--ink-3); margin:0 0 18px;
+  }
+  .specline b{color:var(--ink-2); font-weight:600}
+
+  /* ---------- stepper ---------- */
+  .stepper{
+    display:flex; align-items:flex-start; margin:4px 0 26px;
+  }
+  .step{
+    flex:none; display:flex; flex-direction:column; align-items:center; gap:7px;
+    background:none; border:0; padding:4px 10px; cursor:pointer;
+    font-family:inherit; color:var(--ink-3); min-width:96px;
+  }
+  .step .num{
+    width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:700; color:var(--ink-2);
+    background:var(--surface); border:1.5px solid var(--line-strong); transition:.18s;
+  }
+  .step .lbl{font-size:13.5px; font-weight:600; color:var(--ink-2)}
+  .step .sub{font-size:11.5px; color:var(--ink-3)}
+  .step:not(:disabled):hover .lbl{color:var(--ink)}
+  .step:disabled{cursor:default; opacity:.55}
+  .step:focus-visible .num{outline:2px solid var(--accent); outline-offset:2px}
+  .step.active .num{background:var(--accent); border-color:var(--accent); color:#fff}
+  .step.active .lbl{color:var(--accent)}
+  .step.done .num{background:var(--ok); border-color:var(--ok); color:#fff}
+  .step.done .lbl{color:var(--ok)}
+  .step.locked .num{background:var(--inset)}
+  .conn{
+    flex:1; height:2px; margin:16px 6px 0; border-radius:2px; background:var(--line);
+  }
+  .conn.on{background:var(--ok)}
+  .conn.onnext{background:var(--accent)}
+
+  /* ---------- panels ---------- */
+  .panel{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); padding:26px 28px; margin-bottom:18px;
+  }
+  .panel-head h2{font-size:19px; margin:0 0 4px; letter-spacing:-.015em}
+  .panel-head p{margin:0; color:var(--ink-3); font-size:13.5px}
+  .panel-head .headline{display:flex; align-items:center; gap:10px; margin-bottom:6px}
+  .panel-head .headline svg{color:var(--accent)}
+  .head-note{margin-left:auto; font-size:12.5px; color:var(--ink-3); white-space:nowrap}
+  h3.sec{font-size:13.5px; margin:0 0 8px; color:var(--ink-2)}
+  .subhead{font-size:13.5px; font-weight:700; margin:0 0 3px}
+  .opt{font-size:11.5px; font-weight:600; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em}
+
+  /* ---------- live extraction filmstrip ---------- */
+  .exstrip{
+    display:flex; gap:12px; align-items:flex-start;
+    overflow-x:auto; padding:4px 4px 14px; margin-top:16px;
+    scroll-behavior:smooth; -webkit-overflow-scrolling:touch;
+  }
+  .excard{
+    flex:none; width:168px; background:var(--surface);
+    border:1px solid var(--line); border-radius:var(--radius);
+    box-shadow:var(--shadow); overflow:hidden;
+  }
+  .expg{
+    position:relative; background:#0d1117; aspect-ratio:5/7;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .expg img{width:100%; height:100%; object-fit:contain; display:block}
+  .exnum{
+    position:absolute; top:6px; left:6px;
+    font-size:11px; font-weight:700; color:#fff;
+    background:rgba(13,17,23,.72); border:1px solid rgba(255,255,255,.22);
+    padding:2px 7px; border-radius:999px; backdrop-filter:blur(2px);
+  }
+  .excard.new .expg::after{
+    content:"new"; position:absolute; top:6px; right:6px;
+    font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.05em;
+    color:#fff; background:var(--accent); padding:2px 7px; border-radius:999px;
+    animation:pulse 1.3s infinite;
+  }
+  .expan{display:flex; gap:4px; padding:7px; border-top:1px solid var(--line)}
+  .expan img{
+    flex:1; min-width:0; height:72px; object-fit:cover; border-radius:6px;
+    border:1px solid var(--line); background:var(--inset);
+  }
+  .exmeta{font-size:11.5px; color:var(--ink-3); padding:0 4px 9px; text-align:center}
+  .exempty{
+    margin-top:16px; padding:22px; text-align:center;
+    border:1px dashed var(--line-strong); border-radius:var(--radius);
+    color:var(--ink-3); font-size:13px; background:var(--inset);
+  }
+
+  /* ---------- memory + routing panel ---------- */
+  .memgrid{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:14px}
+  @media (max-width:820px){ .memgrid{grid-template-columns:1fr} }
+  .memcol h3{font-size:12px; margin:0 0 8px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em}
+  .memlist{display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height:340px; overflow:auto}
+  .memgroup{border:1px solid var(--line); border-radius:var(--radius); overflow:hidden}
+  .memlabel{display:block; padding:5px 10px; font-size:10.5px; font-weight:800; letter-spacing:.06em; border-bottom:1px solid var(--line)}
+  .memlabel.ch{background:var(--ok-soft)}
+  .memlabel.wo{background:var(--accent-soft)}
+  .memlabel.st{background:var(--warn-soft)}
+  .memlabel.co{background:var(--err-soft)}
+  .memlabel.bk{background:#efeafd; color:#5b21b6}
+  .bookref{border:1px solid var(--line); background:var(--inset); border-radius:10px; padding:10px 12px; flex:1}
+  .bookref input{flex:1}
+  .memitem{display:flex; gap:8px; align-items:flex-start; padding:6px 10px; border-bottom:1px solid var(--line); font-size:12px}
+  .memitem:last-child{border-bottom:0}
+  .memk{font-weight:700; color:var(--ink-2); flex:none; max-width:34%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .memv{color:var(--ink-3); min-width:0; word-break:break-word}
+  .memitem .mini.x{
+    margin-left:auto; flex:none; width:20px; height:20px; line-height:1;
+    display:inline-flex; align-items:center; justify-content:center;
+    background:none; border:1px solid var(--line-strong); border-radius:6px;
+    color:var(--ink-3); cursor:pointer; font-weight:800;
+  }
+  .memitem .mini.x:hover{color:var(--err); border-color:var(--err)}
+  .memadd{display:flex; flex-direction:column; gap:8px}
+  .memadd input{font:inherit; padding:8px 10px; border:1px solid var(--line-strong); border-radius:8px; background:var(--surface); color:var(--ink); flex:1}
+
+  /* ---------- knowledge base panel ---------- */
+  .kbgrid{display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-top:14px}
+  @media (max-width:1000px){ .kbgrid{grid-template-columns:1fr 1fr} }
+  @media (max-width:680px){ .kbgrid{grid-template-columns:1fr} }
+  .kbcol h3{font-size:12px; margin:0 0 8px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em}
+  .kbstat{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px}
+  .kbstat .chip{font-size:11px; color:var(--ink-2); background:var(--inset); border:1px solid var(--line); border-radius:999px; padding:3px 10px}
+  .kbstat .chip b{color:var(--ink)}
+  .kblist{display:flex; flex-direction:column; gap:8px; max-height:420px; overflow:auto; margin-top:10px}
+  .kbcard{border:1px solid var(--line); border-radius:var(--radius); padding:9px 12px; font-size:12.5px; background:var(--surface)}
+  .kbcard .n{font-weight:800; color:var(--ink)}
+  .kbcard .m{color:var(--ink-3); font-size:11.5px; margin-top:2px}
+  .kbcard .roles{margin-top:3px; font-size:11px; color:var(--ink-3)}
+  .badge{display:inline-block; font-size:9.5px; font-weight:800; letter-spacing:.05em; text-transform:uppercase; border-radius:5px; padding:1px 6px; margin-right:4px}
+  .badge.pdf{background:var(--ok-soft)}
+  .badge.vlm{background:var(--accent-soft)}
+  .badge.ocr{background:var(--warn-soft)}
+  .badge.internet{background:#efeafd; color:#6d28d9}
+  .badge.user{background:var(--err-soft)}
+  .kbev{padding:2px 0; border-bottom:1px dashed var(--line); font-size:12px}
+  .kbev:last-child{border-bottom:0}
+  .kbev .pg{color:var(--ink-3); font-size:10.5px; font-weight:700}
+  .kbempty{color:var(--ink-3); font-size:12.5px; padding:12px 2px}
+  .kbconflict{border:1px solid var(--err-soft); background:var(--err-soft); border-radius:var(--radius); padding:8px 10px; font-size:12px}
+  .kbconflict .t{font-weight:800; color:var(--err)}
+  .kbcpbar{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
+  .kbcp{display:flex; align-items:center; gap:5px; font-size:12px; padding:4px 10px; border-radius:var(--radius); border:1px solid var(--line); background:var(--surface); white-space:nowrap}
+  .kbcpicon{font-weight:800; font-size:13px}
+  .kbcpstage{font-weight:700; text-transform:capitalize}
+  .kbcpdet{color:var(--ink-3); font-size:11.5px}
+  .kbcp.ok .kbcpicon{color:#059669}
+  .kbcp.busy .kbcpicon{color:#d97706; animation:spin 1s linear infinite}
+  .kbcp.err .kbcpicon{color:var(--err)}
+  .kbcp.pending .kbcpicon{color:var(--ink-3)}
+  @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+
+  /* ---------- narration + TTS panel ---------- */
+  .ttsgrid{display:grid; grid-template-columns:1fr 1fr; gap:18px; margin-top:14px}
+  @media (max-width:820px){ .ttsgrid{grid-template-columns:1fr} }
+  .ttscol h3{font-size:12px; margin:0 0 8px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em}
+  .ttsrow{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .ttsrow select,.ttsrow input[type=text]{font:inherit; padding:8px 10px; border:1px solid var(--line-strong); border-radius:8px; background:var(--surface); color:var(--ink); flex:1; min-width:150px}
+  .seglist{display:flex; flex-direction:column; gap:9px; margin-top:10px; max-height:440px; overflow:auto}
+  .segitem{border:1px solid var(--line); border-radius:var(--radius); padding:10px 12px; display:flex; flex-direction:column; gap:8px; background:var(--surface)}
+  .segitem .seghead{display:flex; gap:8px; align-items:center}
+  .segidx{font-size:10.5px; font-weight:800; letter-spacing:.05em; color:var(--ink-3); flex:none}
+  .segitem .segtxt{flex:1; min-height:56px; font:inherit; font-size:12.5px; line-height:1.45; padding:8px 10px; border:1px solid var(--line-strong); border-radius:8px; background:var(--inset); color:var(--ink); resize:vertical}
+  .segitem .segmeta{font-size:11px; color:var(--ink-3)}
+  .segitem audio{width:100%; height:34px}
+
+  /* ---------- information-needed panel ---------- */
+  .qlist{display:flex; flex-direction:column; gap:8px; margin-top:10px; max-height:360px; overflow:auto}
+  .qrow{display:flex; gap:9px; align-items:flex-start; padding:9px 11px; border:1px solid var(--line); border-radius:9px; background:var(--surface); flex-wrap:wrap}
+  .qrow .qtext{flex:1; min-width:220px; font-size:12.5px; line-height:1.4; color:var(--ink)}
+  .qrow .qtext b{font-weight:600}
+  .qmeta{font-size:10.5px; color:var(--ink-3); font-variant-numeric:tabular-nums}
+  .qkind{flex:none; font-size:10px; font-weight:800; letter-spacing:.05em; color:var(--accent); background:var(--accent-soft); border-radius:99px; padding:2px 8px}
+  .qrow input[type=text]{font:inherit; min-width:170px; padding:7px 9px; border:1px solid var(--line-strong); border-radius:7px; background:var(--inset); color:var(--ink); flex:1}
+  .qrow .mini{flex:none; padding:6px 10px}
+  .qempty{font-size:12.5px; color:var(--ink-3); padding:6px 2px}
+  .qscroll{max-height:280px; overflow:auto; display:flex; flex-direction:column; gap:7px}
+  .bpair{display:grid; grid-template-columns:auto 1fr; gap:2px 12px; font-size:11.5px; line-height:1.45}
+  .bpair dt{color:var(--ink-3); font-weight:700; white-space:nowrap}
+  .bpair dd{margin:0; color:var(--ink); word-break:break-word; font-family:ui-monospace,monospace; font-size:11px}
+  .bdetail{border-radius:8px; border:1px dashed var(--line-strong); padding:8px 12px; margin-top:7px; background:var(--inset)}
+  .bdetail.hide{display:none}
+  .bdetail h4{margin:0 0 6px; font-size:10.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:var(--accent)}
+  .bdetail.empty{color:var(--ink-3); font-size:11.5px}
+
+  /* ---------- buttons ---------- */
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--surface); color:var(--ink); border:1px solid var(--line-strong);
+    border-radius:9px; padding:9px 15px; font:600 13.5px inherit; cursor:pointer;
+    transition:background .15s, border-color .15s, transform .04s;
+  }
+  .btn:hover{background:var(--inset)}
+  .btn:active{transform:translateY(1px)}
+  .btn:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  .btn:disabled{opacity:.45; cursor:not-allowed; transform:none}
+  .btn svg{flex:none}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+  .btn.primary:hover:not(:disabled){background:#234bbd}
+  .btn.success{background:var(--ok); border-color:var(--ok); color:#fff}
+  .btn.success:hover:not(:disabled){background:#116b34}
+  .btn.danger{color:var(--err); border-color:#efc3be; background:var(--err-soft)}
+  .btn.danger:hover:not(:disabled){background:#f6dcd9}
+  .btn.ghost{background:none; border-color:transparent; color:var(--accent); padding:6px 8px}
+  .btn.ghost:hover{background:var(--accent-soft)}
+  .btn.big{padding:13px 22px; font-size:15px; border-radius:11px}
+  .btn.small{padding:6px 11px; font-size:12.5px}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .row.end{margin-top:6px}
+
+  /* ---------- dropzones ---------- */
+  .drop{
+    border:1.5px dashed var(--line-strong); border-radius:12px; background:var(--inset);
+    padding:28px 20px; text-align:center; cursor:pointer; transition:.16s;
+    color:var(--ink-3); outline:none;
+  }
+  .drop:hover,.drop:focus-visible{border-color:var(--accent)}
+  .drop.drag{border-color:var(--accent); background:var(--accent-soft)}
+  .drop .dz-ic{
+    width:44px; height:44px; margin:0 auto 10px; border-radius:12px;
+    background:var(--accent-soft); color:var(--accent);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .drop strong{display:block; color:var(--ink); font-size:14.5px; margin-bottom:3px}
+  .drop .dz-sub{font-size:12.5px}
+  .drop.compact{padding:18px 16px}
+  .drop.compact .dz-ic{width:34px; height:34px; margin-bottom:8px}
+
+  /* ---------- input-ish ---------- */
+  input[type=number],select{
+    background:var(--surface); color:var(--ink); border:1px solid var(--line-strong);
+    border-radius:8px; padding:8px 10px; font:400 13.5px inherit;
+  }
+  input[type=number]:focus-visible,select:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  label.f{font-size:12.5px; color:var(--ink-3); display:inline-flex; align-items:center; gap:6px}
+  label.f b{color:var(--ink-2); font-weight:600}
+  audio,video{width:100%}
+  video{background:#0b1020; border-radius:10px; border:1px solid var(--line); max-height:420px}
+  audio{height:38px; border-radius:8px}
+
+  /* ---------- state lines ---------- */
+  .state-line{display:flex; align-items:center; gap:8px; font-size:13px; margin-top:12px}
+  .state-line svg{flex:none}
+  .state-line.ok{color:var(--ok)} .state-line.ok svg{color:var(--ok)}
+  .state-line.warn{color:var(--warn)} .state-line.warn svg{color:var(--warn)}
+  .state-line.err{color:var(--err)} .state-line.err svg{color:var(--err)}
+  .state-line.muted{color:var(--ink-3)}
+
+  /* ---------- progress ---------- */
+  .progress{height:12px; border-radius:999px; background:var(--inset); border:1px solid var(--line); overflow:hidden}
+  .progress > div{height:100%; width:100%; transform:scaleX(0); transform-origin:left; background:var(--accent); border-radius:999px; transition:transform .45s}
+  .progress.sub{height:6px; margin:2px 0 8px}
+  .livebox{background:var(--inset); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-top:12px}
+  .livemeta{display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--ink-2)}
+  .livemeta b{color:var(--ink); font-weight:700}
+  .livemeta .cnt{margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; color:var(--accent); white-space:nowrap}
+  .liveimg{display:block; width:100%; max-height:420px; object-fit:contain; margin-top:10px; border:1px solid var(--line); border-radius:10px; background:var(--inset)}
+  .pmeta{display:flex; align-items:baseline; gap:12px; margin-top:9px}
+  .pct{font-size:26px; font-weight:700; letter-spacing:-.03em; font-variant-numeric:tabular-nums}
+  .pmeta .d1{font-size:13.5px; color:var(--ink-2)}
+  .pmeta .d2{margin-left:auto; font-size:13px; color:var(--ink-3); display:inline-flex; align-items:center; gap:5px}
+  .elapsed{display:inline-flex; align-items:center; gap:5px}
+
+  /* ---------- stage board ---------- */
+  .board{margin-top:18px; border:1px solid var(--line); border-radius:10px; overflow:hidden}
+  .brow{display:flex; align-items:center; gap:12px; padding:9px 14px; font-size:13px; border-top:1px solid var(--line)}
+  .brow:first-child{border-top:0}
+  .brow .dot{width:9px; height:9px; border-radius:50%; background:#c9d2dd; flex:none}
+  .brow.done .dot{background:var(--ok)}
+  .brow.run{background:var(--accent-soft)}
+  .brow.run .dot{background:var(--accent); animation:pulse 1.2s infinite}
+  .brow.fail .dot{background:var(--err)}
+  .brow .nm{flex:1; min-width:0; display:flex; align-items:baseline; gap:9px}
+  .brow .nm .t{font-weight:600; color:var(--ink-2); white-space:nowrap}
+  .brow .nm .k{font-size:11.5px; color:var(--ink-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .brow .tm{font-size:11.5px; color:var(--ink-3); font-variant-numeric:tabular-nums}
+  .tag{font-size:11px; font-weight:600; padding:2px 9px; border-radius:999px; flex:none}
+  .tag.ok{color:var(--ok); background:var(--ok-soft)}
+  .tag.run{color:var(--accent); background:var(--accent-soft)}
+  .tag.fail{color:var(--err); background:var(--err-soft)}
+  .tag.wait{color:var(--ink-3); background:var(--inset)}
+
+  /* ---------- stage pages / per-stage nav ---------- */
+  .stagebar{
+    display:flex; gap:6px; flex-wrap:wrap; align-items:center;
+    margin:2px 0 24px; padding:10px 12px;
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+  }
+  .stagebar .bar-title{font-size:11.5px; font-weight:700; color:var(--ink-3); text-transform:uppercase; letter-spacing:.05em; margin-right:4px}
+  .stagelink{
+    display:inline-flex; align-items:center; gap:6px;
+    font-size:12.5px; font-weight:600; color:var(--ink-2);
+    border:1px solid var(--line); background:var(--surface);
+    border-radius:999px; padding:5px 11px; cursor:pointer; font-family:inherit;
+  }
+  .stagelink .dot{width:8px; height:8px; border-radius:50%; background:#c9d2dd}
+  .stagelink.s-done .dot{background:var(--ok)}
+  .stagelink.s-run .dot{background:var(--accent); animation:pulse 1.2s infinite}
+  .stagelink.s-fail .dot{background:var(--err)}
+  .stagelink:hover{color:var(--ink); border-color:var(--line-strong)}
+  .stagelink[aria-current="true"]{background:var(--accent-soft); border-color:#bcd1fb; color:var(--accent)}
+  .stagemeta{margin-left:auto; font-size:11.5px; color:var(--ink-3); white-space:nowrap}
+  .pagehead{display:flex; align-items:center; gap:12px; margin-bottom:16px}
+  .pagehead .back{
+    flex:none; display:inline-flex; align-items:center; gap:6px; cursor:pointer;
+    font:600 12.5px inherit; color:var(--accent); background:var(--accent-soft);
+    border:1px solid #bcd1fb; border-radius:9px; padding:7px 12px;
+  }
+  .pagehead .back:hover{background:#e2ecff}
+  .pagehead h2{margin:0; font-size:20px; letter-spacing:-.015em}
+  .pagehead .sub{margin:2px 0 0; color:var(--ink-3); font-size:13px}
+  .stagegrid{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media (max-width:720px){.stagegrid{grid-template-columns:1fr}}
+
+  /* ---------- collapsibles ---------- */
+  details.coll{border:1px solid var(--line); border-radius:10px; background:var(--surface); margin-top:16px}
+  details.coll > summary{
+    list-style:none; cursor:pointer; padding:12px 16px; display:flex; align-items:center; gap:9px;
+    font-size:13.5px; font-weight:600; color:var(--ink-2); user-select:none;
+  }
+  details.coll > summary::-webkit-details-marker{display:none}
+  details.coll > summary svg.chev{margin-left:auto; transition:transform .18s}
+  details.coll[open] > summary svg.chev{transform:rotate(180deg)}
+  details.coll > summary:hover{color:var(--ink)}
+  .coll-body{padding:14px 16px 16px; border-top:1px solid var(--line); background:var(--inset)}
+  #output{
+    margin:0;
+    font:13px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    color:var(--ink-2); padding:10px 12px;
+  }
+  #output .logline{display:flex; gap:8px; align-items:baseline; padding:2px 0; border-bottom:1px dashed var(--line)}
+  #output .logline:last-child{border-bottom:none}
+  #output .logts{flex:none; font-size:11px; color:var(--ink-3); font-variant-numeric:tabular-nums}
+  #output .logtxt{word-break:break-word}
+  #output .logline.running .logtxt{color:var(--accent); font-weight:600}
+  #output .logline.done .logts{color:var(--ok)}
+  details.console > summary svg.chev{margin-left:auto}
+
+  /* ---------- result ---------- */
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:18px}
+  @media (max-width:680px){.grid2{grid-template-columns:1fr}}
+  .sfxlist{display:flex; flex-direction:column; gap:6px; margin-top:6px}
+  .sfxrow{display:flex; align-items:center; gap:10px; background:var(--inset); border:1px solid var(--line); border-radius:8px; padding:5px 10px}
+  .sfxrow audio{height:30px; min-width:180px}
+  .sub{background:var(--inset); border:1px solid var(--line); border-radius:10px; padding:16px}
+  .sub h3{font-size:14px; margin:0 0 10px; display:flex; align-items:center; gap:8px; color:var(--ink)}
+  .sub h3 svg{color:var(--accent)}
+  .empty{text-align:center; padding:26px 16px; color:var(--ink-3); font-size:13px}
+  .empty svg{margin:0 auto 10px; color:#b6c0cd}
+  .empty strong{display:block; color:var(--ink-2); margin-bottom:3px}
+
+  /* ---------- notice ---------- */
+  #alert{display:none; align-items:flex-start; gap:10px; padding:12px 15px; border-radius:10px;
+    font-size:13.5px; margin-bottom:18px; white-space:pre-wrap; word-break:break-word}
+  #alert.show{display:flex}
+  #alert svg{flex:none; margin-top:1px}
+  #alert.err{background:var(--err-soft); border:1px solid #efc3be; color:var(--err)}
+  #alert.ok{background:var(--ok-soft); border:1px solid #bfe3cc; color:var(--ok)}
+  #alert.warn{background:var(--warn-soft); border:1px solid #efd9ae; color:var(--warn)}
+  kbd{font:inherit; background:var(--inset); border:1px solid var(--line-strong); border-radius:5px; padding:0 5px}
+
+  /* ---------- projects (home screen) ---------- */
+  #projgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:14px; margin-top:16px}
+  @media (max-width:720px){ #projgrid{grid-template-columns:1fr} }
+  .pcard{position:relative; border:1px solid var(--line); border-radius:12px; background:var(--surface); overflow:hidden; display:flex; flex-direction:column}
+  .pcard .pcover{aspect-ratio:3/4; background:var(--inset); display:flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:34px; overflow:hidden}
+  .pcard .pcover img{width:100%; height:100%; object-fit:cover}
+  .pcard .pbody{padding:11px 12px 12px; display:flex; flex-direction:column; gap:8px; flex:1}
+  .pcard .pname{font-weight:700; font-size:14.5px; color:var(--ink-2); line-height:1.25}
+  .pcard .pchars{display:flex; flex-wrap:wrap; gap:6px}
+  .pchar{position:relative; width:44px; height:44px; border-radius:8px; overflow:hidden; background:var(--inset); border:1px solid var(--line); display:inline-flex; align-items:center; justify-content:center; color:var(--ink-3); font-size:9px; font-weight:700}
+  .pchar img{width:100%; height:100%; object-fit:cover}
+  .pchar.charname{width:auto; padding:0 8px; font-size:11px; color:var(--ink-2); border-radius:99px}
+  .ptogg{display:flex; gap:8px; align-items:center; margin-top:2px}
+  .ptogg .tg{display:flex; align-items:center; gap:5px; font-size:11.5px; color:var(--ink-2); cursor:pointer}
+  .ptogg .tg input{accent-color:var(--accent); cursor:pointer}
+  .pcard .pfoot{display:flex; gap:8px; align-items:center; padding:0 12px 12px}
+  .pcard .pdel{margin-left:auto; color:var(--ink-3); cursor:pointer; font-size:12px; background:none; border:none}
+  .pcard .pdel:hover{color:var(--err)}
+  /* memory section */
+  #memsection{display:flex; flex-direction:column; gap:14px}
+  .memhero{display:flex; gap:16px; align-items:flex-start}
+  .memhero img{width:96px; aspect-ratio:3/4; object-fit:cover; border-radius:10px; border:1px solid var(--line); background:var(--inset)}
+  .memhero .membody{flex:1; min-width:0}
+  .memhero .memtitle{font-weight:700; font-size:16px; color:var(--ink-1)}
+  .memhero .memmeta{font-size:12.5px; color:var(--ink-3); margin-top:4px; line-height:1.5}
+  .memchars{display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:12px}
+  .memchar{display:flex; flex-direction:column; gap:6px; align-items:center; text-align:center}
+  .memchar img{width:88px; height:120px; object-fit:cover; border-radius:9px; border:1px solid var(--line); background:var(--inset)}
+  .memchar .mcname{font-size:11.5px; color:var(--ink-2); font-weight:600; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .memchar .mcrole{font-size:10px; color:var(--ink-3); line-height:1.25; max-height:26px; overflow:hidden; display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2}
+  .ptag{font-size:10.5px; font-weight:600; color:var(--accent); background:color-mix(in srgb, var(--accent) 12%, transparent); border:1px solid color-mix(in srgb, var(--accent) 35%, transparent); padding:1px 7px; border-radius:999px; vertical-align:2px; white-space:nowrap}
+  .ptag.flat{font-weight:500; color:var(--ink-3); background:var(--inset); border-color:var(--line)}
+  .seriesroster summary{cursor:pointer}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg></div>
+      <div>
+        <h1>MangaExplainer</h1>
+        <p>Turn a manga into a narrated explanation video</p>
+      </div>
+    </div>
+    <div class="topmeta">
+      <span class="pill" id="modepill"><span class="d"></span>mode…</span>
+      <span class="pill" id="statuspill">loading…</span>
+      <button class="btn small" id="btn_clear" title="Wipe projects, memory and fetched images (keeps your PDF)."><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg> Clear</button>
+      <button class="btn small" id="btn_clear_cache" title="Delete generated run artifacts (pages, panels, OCR, audio, final video…). Keeps projects, memory, PDF and voice."><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v5h-5"/></svg> Clear cache</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="specline" id="specline"></div>
+  <div id="alert"></div>
+
+  <nav class="stepper" aria-label="Pipeline steps">
+    <button class="step active" id="stp1" aria-current="step"><span class="num">1</span><span class="lbl">Set up</span><span class="sub">manga + voice</span></button>
+    <i class="conn" id="c12"></i>
+    <button class="step" id="stp2"><span class="num">2</span><span class="lbl">Run</span><span class="sub">watch it work</span></button>
+    <i class="conn" id="c23"></i>
+    <button class="step" id="stp3"><span class="num">3</span><span class="lbl">Result</span><span class="sub">watch the video</span></button>
+  </nav>
+
+  <!-- ============ PER-STAGE NAV + STAGE VIEW ============ -->
+  <!-- Every pipeline stage has its own page, reached from this bar (or by
+       clicking a stage row on the Run board). #/overview is the wizard. -->
+  <nav class="stagebar" id="stagebar" aria-label="Pipeline stage pages">
+    <span class="bar-title">Stages</span>
+    <div id="stagelinks" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <span class="stagemeta" id="stagebarnote"></span>
+  </nav>
+
+  <section id="stageview" class="hide">
+    <div class="pagehead">
+      <button class="back" id="stageback" title="Back to overview">← Overview</button>
+      <div style="min-width:0">
+        <h2 id="stage-title"></h2>
+        <p class="sub" id="stage-sub"></p>
+      </div>
+      <span class="head-note" id="stage-note" style="margin-left:auto"></span>
+    </div>
+    <div class="stagegrid">
+      <div class="panel" style="margin:0">
+        <div class="panel-head">
+          <div class="headline"><h2 style="font-size:16px" id="stage-status-title">Status</h2></div>
+        </div>
+        <div id="stage-status" class="state-line muted"><span>Checking…</span></div>
+        <div id="stage-times" style="margin-top:10px;font-size:12.5px;color:var(--ink-3)"></div>
+        <div class="progress" style="margin-top:14px"><div id="stage-progbar"></div></div>
+        <div class="pmeta"><span class="d1" id="stage-progtext">—</span></div>
+      </div>
+      <div class="sub" id="stage-artifacts">
+        <h3>Artifacts</h3>
+        <div class="state-line muted"><span id="stage-art-body">No output for this stage yet.</span></div>
+      </div>
+    </div>
+    <details class="coll console" id="stage-console" style="margin-top:18px">
+      <summary><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"/></svg>Stage activity log<svg class="chev" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></summary>
+      <div class="coll-body"><div id="stage-output">Nothing yet for this stage.</div></div>
+    </details>
+  </section>
+
+  <!-- ============ STEP 1 — SET UP ============ -->
+  <section id="step1">
+
+    <!-- ============ HOME / PROJECTS (first screen) ============ -->
+    <div class="panel projpanel">
+      <div class="panel-head">
+        <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M3 7l9 4 9-4"/></svg><h2>Identify my manga</h2><span class="head-note" id="projnote"></span></div>
+        <p id="identify-sub">The app reads your PDF's cover + first pages to figure out which manga it is — then fetches the facts, cast and pictures automatically. No typing needed.</p>
+      </div>
+
+      <!-- Auto-identify from the PDF (default path) -->
+      <div class="bookref">
+        <div class="state-line" id="scanline" style="margin-bottom:8px"><b>Scanning your PDF…</b></div>
+        <div class="row">
+          <button class="btn primary big" id="btn_scan" disabled><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3" transform="rotate(45 12 12)" opacity="0"/><path d="M3 7l9-4 9 4 0 10-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg> Build my manga from this PDF</button>
+          <span class="head-note muted" id="scanmeta"></span>
+        </div>
+        <div class="state-line muted hide" id="scanout" style="margin-top:8px"></div>
+      </div>
+
+      <!-- Manual fallback (only revealed if auto-identify couldn't) -->
+      <div class="bookref hide" id="manualwrap" style="margin-top:12px">
+        <div class="row">
+          <input id="projname" placeholder="Type the manga's name, e.g. One Piece" style="flex:1">
+          <button class="btn primary" id="projcreate">Fetch info + pictures → memory</button>
+        </div>
+        <div class="state-line muted hide" id="projout" style="margin-top:6px"></div>
+      </div>
+
+      <!-- Single path forward: both a PDF and a built project are required -->
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary big" id="continuebtn" disabled>Continue to Run <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </div>
+
+      <!-- All saved projects -->
+      <div id="projgrid"></div>
+
+      <!-- Current manga memory (fetched facts + character images) -->
+      <details class="coll" style="margin-top:16px">
+        <summary>Manga memory <span class="head-note" id="memnbite"></span></summary>
+        <div class="coll-body" id="memsection"></div>
+      </details>
+
+      <!-- The PDF the app reads from (only this one; replace to use another) -->
+      <div class="row" style="margin-top:14px; align-items:center; gap:10px; flex-wrap:wrap">
+        <span class="head-note" id="pdfstate" style="margin:0"></span>
+        <button class="btn small" id="pdfreplace" onclick="this.closest('div').querySelector('#pdffile').click()">Use another PDF…</button>
+        <input type="file" id="pdffile" class="hide" accept=".pdf,application/pdf,application/x-pdf">
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg><h2>Demo voice</h2></div>
+        <p>Hear the narration voice before committing to a full run — or upload your own clip to make it the reference voice.</p>
+      </div>
+      <div class="row">
+        <button class="btn" id="btn_sample"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>Preview the narration voice</button>
+        <span class="head-note" id="samplemeta"></span>
+      </div>
+      <audio id="sampleaudio" class="hide" controls preload="none" style="margin-top:10px"></audio>
+      <div style="margin-top:20px">
+        <p class="subhead">Use your own voice <span class="opt">Optional</span></p>
+        <div class="drop compact" id="vdrop" role="button" tabindex="0" aria-label="Upload a voice sample">
+          <div class="dz-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V7l10-2v11"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></div>
+          <strong>Drop an audio clip here, or click to browse</strong>
+          <span class="dz-sub">wav, mp3, flac, ogg, m4a — becomes the narration reference voice. Mock demo mode plays a tone; real mode uses it for voice cloning.</span>
+        </div>
+        <div class="state-line muted" id="voicestate"></div>
+        <input type="file" id="vfile" class="hide" accept="audio/*,.wav,.mp3,.flac,.ogg,.m4a">
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STEP 2 — RUN ============ -->
+  <section id="step2" class="hide">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 5h14v14H6z"/><path d="M6 9h14M3 9h3M3 15h3"/></svg><h2>Run the pipeline</h2><span class="head-note" id="runnote"></span></div>
+        <p id="runsub">From PDF to a finished video. Completed stages are skipped, never repeated.</p>
+      </div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn primary big" id="btn_run">Run pipeline</button>
+        <button class="btn" id="btn_reset"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13M10 11v5M14 11v5"/></svg>Start from scratch</button>
+      </div>
+
+      <div style="margin-top:20px">
+        <div class="progress"><div id="progbar"></div></div>
+        <div class="pmeta">
+          <span class="pct" id="pct">0%</span>
+          <span class="d1" id="progtext">Waiting — press Run pipeline.</span>
+          <span class="d2" id="elapsed"></span>
+        </div>
+        <div class="livebox hide" id="livebox">
+          <div class="progress sub"><div id="subfill"></div></div>
+          <div class="livemeta"><span id="subtext">…</span><span class="cnt" id="subpct"></span></div>
+        </div>
+      </div>
+
+      <div class="panel hide" id="expanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 5v14M17 5v14"/><circle cx="12" cy="12" r="3"/></svg><h2>Extraction, live</h2><span class="head-note" id="exnote"></span></div>
+          <p>Every extracted page and panel appears here in sequence as it lands on disk — page 1, page 2, page 3 … with each page's panels beneath it.</p>
+        </div>
+        <div class="exstrip" id="exstrip"></div>
+      </div>
+
+      <div class="panel hide" id="clpanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M12 3v18M4 7.5l8 4.5 8-4.5"/></svg><h2>Panel cleaning, live</h2><span class="head-note" id="clnote"></span></div>
+          <p>Each cleaned panel appears here as the cleaning stage strips banners, text boxes and SFX — the colored boxes mark what got removed.</p>
+        </div>
+        <div class="exstrip" id="clstrip"></div>
+      </div>
+
+      <div class="panel hide" id="unpanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/><path d="M8 11h6M11 8v6"/></svg><h2>Panel understanding, live</h2><span class="head-note" id="unnote"></span></div>
+          <p>Each panel's understanding appears here as the pipeline detects its text boxes and reads what's happening — the colored boxes mark the dialogue/letters OCR found, with a note of what the model made of it.</p>
+        </div>
+        <div class="exstrip" id="unstrip"></div>
+      </div>
+
+      <div class="panel hide" id="mempanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg><h2>Memory &amp; routing</h2><span class="head-note" id="memnote"></span></div>
+          <p>Durable story memory the narrator keeps consistent with, plus live status of the OmniRoute gateway that manages providers and API keys.</p>
+        </div>
+        <div class="memgrid">
+          <div class="memcol">
+            <h3>Story memory</h3>
+            <div class="state-line muted" id="memcounts">Checking…</div>
+            <div id="memlist" class="memlist"></div>
+            <details class="coll" style="margin-top:10px">
+              <summary>Add a correction</summary>
+              <div class="coll-body memadd">
+                <div class="row">
+                  <input id="mcckind" placeholder="kind (character_name / location / fact / relationship / reading_direction)" value="fact">
+                  <input id="mctarget" placeholder="target, e.g. character name">
+                </div>
+                <div class="row">
+                  <input id="mccorr" placeholder="the correct value / fact to remember">
+                </div>
+                <button class="btn" id="memaddbtn">Save correction</button>
+              </div>
+            </details>
+          </div>
+          <div class="memcol">
+            <h3>OmniRoute gateway</h3>
+            <div class="state-line muted" id="orstatus">Checking…</div>
+            <p class="sub" id="ornote" style="margin-top:6px"></p>
+            <a class="btn" id="ordash" href="http://127.0.0.1:20128" target="_blank" rel="noopener">Open OmniRoute dashboard</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel hide" id="kbpanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M9 7h6M9 11h6"/></svg><h2>Knowledge base</h2><span class="head-note" id="kbnote"></span></div>
+          <p>The persistent SQLite knowledge base — who, where, what and when, extracted from your analyzed pages, cross-checked against internet research. Sources are shown as badges (pdf / vlm / ocr / internet / user).</p>
+        </div>
+        <div class="state-line muted" id="kbcounts">Checking…</div>
+        <div class="kbgrid" id="kbbody"></div>
+      </div>
+
+      <div class="panel hide" id="ttspanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M9 11l3-3 3 3"/></svg><h2>Narration &amp; TTS</h2><span class="head-note" id="ttsnote"></span></div>
+          <p>Each scene script becomes narration. Edit a segment, preview it, then generate the whole book — every line plays back here. Transparent work: the <b>Pocket TTS</b> stage row below shows the exact segment it is synthesizing.</p>
+        </div>
+
+        <div class="ttsgrid">
+          <div class="ttscol">
+            <h3>Voice engine</h3>
+            <div class="state-line muted" id="ttsstate">Checking…</div>
+            <div class="ttsrow" style="margin-top:10px">
+              <select id="ttsvoice">
+                <option value="">Built-in default voice…</option>
+              </select>
+              <button class="btn" id="ttsstart">Start server</button>
+              <button class="btn" id="ttsstop" disabled>Stop</button>
+            </div>
+            <p class="sub" style="margin-top:8px" id="ttsprovider"></p>
+            <div class="row" style="margin-top:10px">
+              <button class="btn" id="ttsgen">Generate all narration</button>
+              <button class="btn small" data-action="mix">Remix audio</button>
+            </div>
+            <p class="sub" style="margin-top:10px" id="ttsgenstate"></p>
+          </div>
+
+          <div class="ttscol">
+            <h3>Scene scripts</h3>
+            <div class="ttsrow">
+              <select id="ttsdoc"><option value="">Choose a scene…</option></select>
+            </div>
+            <div class="seglist" id="ttssegs"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="board" id="stageboard" style="padding:0"></div>
+
+      <div class="panel hide" id="livepanel">
+        <div class="panel-head">
+          <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><h2>What's happening now</h2><span class="head-note" id="livenote"></span></div>
+          <p id="livephase">Waiting for the pipeline to start — the current panel, page or crop appears here as each stage works.</p>
+        </div>
+        <img id="liveimg" class="liveimg hide" alt="">
+        <div class="state-line muted" style="margin-top:10px" id="livemem"></div>
+      </div>
+
+      <details class="coll console" id="console">
+        <summary><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4zM7 10l2 2-2 2M11 14h4"/></svg>Activity log<span class="chev" style="color:var(--ink-3)"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span></summary>
+        <div id="output">Nothing happening yet.</div>
+      </details>
+    </div>
+  </section>
+
+  <!-- ============ STEP 3 — RESULT ============ -->
+  <section id="step3" class="hide">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="headline"><svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18M7 5v14M17 5v14"/></svg><h2>Your video</h2><span class="head-note" id="resultmeta"></span></div>
+        <p>Every stage finished — this is the narrated explanation built from your manga.</p>
+      </div>
+      <div id="videowrap" class="hide">
+        <video id="video" controls preload="metadata"></video>
+      </div>
+      <div class="empty" id="videoempty">
+        <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3 9h18M7 5v14M17 5v14"/></svg>
+        <strong>No finished video yet</strong>
+        Run the full pipeline on the Run step to produce <b style="color:var(--ink-2)">output/final_video.mp4</b>. Once it exists it will appear here.
+      </div>
+      <div class="grid2">
+        <div class="sub">
+          <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h6"/></svg>Narration</h3>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px">
+            <select id="narrsel" class="hide"></select>
+            <button class="btn small" data-action="tts-narration">Generate narration</button>
+          </div>
+          <audio id="narratioaudio" class="hide" controls preload="none"></audio>
+          <div class="state-line muted" id="narinfo"></div>
+        </div>
+        <div class="sub">
+          <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V7l10-2v11"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>Background music</h3>
+          <p class="muted" style="font-size:12.5px; margin:2px 0 8px">Optional. Track plays under the narration on the next mix (volume control in config <span style="font-family:ui-monospace,monospace; font-size:11.5px">music</span>). Get one any of these ways — upload below, drop a file in <span style="font-family:ui-monospace,monospace; font-size:11.5px">music/</span>, generate a placeholder, or download a free track:</p>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:8px">
+            <a class="btn small" href="/media/track?t=1" download="track.wav">Download current track</a>
+            <button class="btn small" data-action="music_track">Generate placeholder</button>
+            <button class="btn small" data-action="mix">Remix audio</button>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; background:var(--inset); border:1px solid var(--line); border-radius:8px; padding:8px 10px">
+            <select id="musicpreset" style="flex:1; min-width:200px">
+              <option value="">Free public-domain / CC0 track…</option>
+              <option value="cloud_rap">Cloud rap beat · CC0 · short ambient beat</option>
+              <option value="chinese_ensemble">Chinese instrumental ensemble · public domain</option>
+              <option value="_url">Custom audio URL…</option>
+            </select>
+            <input id="musicurl" type="url" class="hide" placeholder="https://example.com/track.mp3" style="flex:1; min-width:220px">
+            <button class="btn small" onclick="doMusicFetch()">Download and add</button>
+          </div>
+          <div class="drop compact" id="musicdrop" tabindex="0" role="button" aria-label="Upload a music file">
+            <div class="dz-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V7l10-2v11"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></div>
+            <strong>Drop a music file</strong>
+            <div class="dz-sub">wav · mp3 · flac · ogg · aac · m4a — saved to the project's music folder, used on the next mix. Downloaded tracks are stored here too.</div>
+          </div>
+          <input type="file" id="musicfile" class="hide" accept=".wav,.mp3,.flac,.ogg,.aac,.m4a">
+          <div class="state-line muted" style="margin-top:8px" id="musicinfo"></div>
+          <div class="sfxlist" id="musiclist"></div>
+        </div>
+        <div class="sub" style="grid-column:1 / -1">
+          <h3><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M6 8v8M9 12v4M12 6v10M15 9v7M18 7v10M21 11v4"/></svg>Sound effects</h3>
+          <p class="muted" style="font-size:12.5px; margin:2px 0 10px">Optional. Drop your own <b>wav · mp3 · ogg</b> SFX files here (saved to <span style="font-family:ui-monospace,monospace; font-size:11.5px">sfx/</span>), or generate demo placeholders. The <b>sfx</b> stage reads <span style="font-family:ui-monospace,monospace; font-size:11.5px">sfx/sfx_manifest.json</span> — created when you generate — and the audio mix plays the effects under the narration. They stay silent until <span style="font-family:ui-monospace,monospace; font-size:11.5px">sfx.enabled</span> is on in config.</p>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px">
+            <button class="btn small" data-action="sfx_demo">Generate SFX demo</button>
+          </div>
+          <div class="drop compact" id="sfxdrop" tabindex="0" role="button" aria-label="Upload a sound effect">
+            <div class="dz-ic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10v4M6 8v8M9 12v4M12 6v10M15 9v7M18 7v10M21 11v4"/></svg></div>
+            <strong>Drop a sound effect</strong>
+            <div class="dz-sub">wav · mp3 · ogg — added to the project's sfx folder.</div>
+          </div>
+          <input type="file" id="sfxfile" class="hide" accept=".wav,.mp3,.ogg">
+          <div class="state-line muted" style="margin-top:8px" id="sfxinfo"></div>
+          <div class="sfxlist" id="sfxlist"></div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:18px">
+        <button class="btn" data-action="render">Re-render video</button>
+        <button class="btn" data-action="check">Check quality</button>
+        <button class="btn" data-action="export">Export MP4</button>
+        <a class="btn primary" id="dl-video" href="/media/final_video?t=1" download="final_video.mp4">Download video</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let statusData = null, lastJob = { running:false }, step = 1, autoAdv = false;
+
+const STAGE_LABELS = {
+  extract:"Extract page", panels:"Detect panels", order:"Reading order", knowledge:"Knowledge",
+  scenes:"Build scenes", script:"Write script", audio:"Generate audio", tts:"Pocket TTS",
+  plan:"Visual plan", crops:"Cinematic crops", motion:"Camera motion", ocr:"OCR text",
+  analyze:"Analyze panel", "panels-prep":"Prepare panels", mix:"Audio mix", render:"Render video",
+  export:"Export MP4", check:"Check quality", status:"Status", "clean-cache":"Clean cache",
+};
+
+/* Real pipeline stage names (STAGE_NAMES in run_pipeline) -> [hash slug, label] */
+const PIPE = {
+  extract_pages:     ["extract",     "Extract pages"],
+  clean_panels:      ["clean",       "Clean panels"],
+  understand_panels: ["understand",  "Understand panels"],
+  knowledge_base:    ["knowledge-base","Knowledge base"],
+  write_script:      ["write-script","Write narration"],
+  pocket_tts:        ["tts",         "Pocket TTS"],
+  voice_timing:      ["voice-timing","Voice timing"],
+  prepare_panels:    ["prepare",     "Prepare panels"],
+  camera_motion:     ["camera",      "Camera movement"],
+  music:             ["music",       "Music"],
+  sfx:               ["sfx",         "Sound effects"],
+  audio_mix:         ["audio-mix",   "Audio mix"],
+  render_video:      ["render",      "Render video"],
+  quality_check:     ["quality",     "Quality check"],
+};
+Object.keys(PIPE).forEach(n=>{ if (STAGE_LABELS[n]===undefined) STAGE_LABELS[n]=PIPE[n][1]; });
+
+const STAGE_DESC = {
+  extract_pages:     "Scans the uploaded PDF and writes one image per manga page.",
+  clean_panels:      "Removes banner strips, caption/text boxes and sound-effect stamps from every panel before OCR and analysis.",
+  understand_panels: "Runs OCR (manga_ocr) and panel analysis (Gemini VLM) on every panel to read the text and understand each scene.",
+  knowledge_base:    "Builds the persistent knowledge base — extracts characters, places and events into SQLite, detects chapters and writes summaries.",
+  write_script:      "Writes the narration script from the panel understanding.",
+  pocket_tts:        "Synthesizes the narration audio with Pocket TTS, cloning the reference voice.",
+  voice_timing:      "Times the narration lines to the footage.",
+  prepare_panels:    "Builds cinematic crops of each panel for the camera pass.",
+  camera_motion:     "Adds Ken Burns-style camera movement to every crop.",
+  music:             "Places an optional background music track.",
+  sfx:               "Adds optional sound effects.",
+  audio_mix:         "Mixes narration, music and SFX into the final soundtrack.",
+  render_video:      "Encodes all frames into the finished MP4.",
+  quality_check:     "Validates the output file before it is offered for download.",
+};
+const PIPELINE_ORDER = Object.keys(PIPE);
+let currentView = "overview";
+
+function pipeStageByHash(hash){
+  const h = (hash||"").replace(/^#\//,"");
+  return PIPELINE_ORDER.find(n=>PIPE[n][0]===h) || null;
+}
+function stageHash(name){ return "#/"+PIPE[name][0]; }
+
+function stageStatus(s, name){
+  return ((s&&s.progress&&s.progress.stages)||[]).find(r=>r.name===name)?.status || "pending";
+}
+
+/* one page per stage: build the clickable stage tabs */
+function buildStageBar(){
+  const wrap = $("stagelinks"); if (!wrap) return;
+  wrap.innerHTML = "";
+  PIPELINE_ORDER.forEach(name=>{
+    const b = document.createElement("button");
+    b.className = "stagelink"; b.type="button";
+    b.dataset.hash = stageHash(name);
+    b.innerHTML = '<span class="dot"></span>'+PIPE[name][1];
+    b.addEventListener("click", ()=>{ location.hash = stageHash(name); });
+    wrap.appendChild(b);
+  });
+}
+
+/* hash router: overview (wizard) vs one section per stage */
+function showView(hash, s){
+  s = s || statusData;
+  const psk = pipeStageByHash(hash);
+  currentView = psk || "overview";
+  ["step1","step2","step3"].forEach(id=>$(id).classList.add("hide"));
+  const sv = $("stageview");
+  sv.classList.toggle("hide", !psk);
+  if (!psk){ $("step"+step).classList.remove("hide"); paintStepper(); }
+  PIPELINE_ORDER.forEach(n=>{
+    const elb = wrapLink(n);
+    if (!elb) return;
+    const st = stageStatus(s,n);
+    elb.setAttribute("aria-current", psk===n ? "true" : "false");
+    elb.className = "stagelink"+(st==="completed"?" s-done":st==="running"?" s-run":st==="failed"?" s-fail":"");
+  });
+  if (psk) renderStageView(s, psk);
+}
+function wrapLink(name){
+  return Array.from(document.querySelectorAll(".stagelink")).find(b=>b.dataset.hash===stageHash(name));
+}
+
+/* fill the focused per-stage page */
+function renderStageView(s, name){
+  s = s || statusData; if (!s) return;
+  $("stage-title").textContent = PIPE[name][1];
+  $("stage-sub").textContent = STAGE_DESC[name] || "";
+  const st = (s.progress.stages||[]).find(r=>r.name===name);
+  const status = st ? st.status : "pending";
+  const running = (status==="running") || (s.progress.live && s.progress.live.stage===name);
+  const box = $("stage-status"), times = $("stage-times");
+  if (status==="completed"){ box.className="state-line ok"; box.innerHTML=ic("check",16)+"<span>Completed — this stage's output is ready.</span>"; }
+  else if (running){ box.className="state-line warn"; box.innerHTML=ic("clock",16)+"<span>Running — this stage is processing right now.</span>"; }
+  else if (status==="failed"){ box.className="state-line err"; box.innerHTML=ic("x",16)+"<span>Failed — resume re-runs this stage.</span>"; }
+  else { box.className="state-line muted"; box.innerHTML=ic("note",16)+"<span>Waiting — runs after the earlier stages.</span>"; }
+  times.innerHTML = "";
+  if (st && st.started_at) times.innerHTML = "started " + st.started_at.replace("T"," ").slice(5,19);
+  if (st && st.completed_at) times.innerHTML += "<br>finished " + st.completed_at.replace("T"," ").slice(5,19);
+
+  const lvPct = $("stage-progbar"), ptxt = $("stage-progtext");
+  const live = s.progress.live;
+  const lv = (live && live.stage===name) ? live : null;
+  if (lv && (lv.done!==undefined || lv.total)){
+    const p = lv.total ? Math.round(100*(lv.done||0)/lv.total) : 0;
+    lvPct.style.transform = "scaleX("+(p/100)+")";
+    ptxt.innerHTML = (running ? (lv.phase||"working")+" — " : "")+(lv.done||0)+" / "+(lv.total||"?");
+  } else if (status==="completed"){
+    lvPct.style.transform = "scaleX(1)"; ptxt.innerHTML = "100% complete";
+  } else {
+    lvPct.style.transform = "scaleX(0)"; ptxt.innerHTML = running ? "working…" : "not started";
+  }
+  $("stage-note").textContent = (running && lastJob) ? tick(lastJob.elapsed||0)+" elapsed" : "";
+
+  const A = s.artifacts||{}, ab = $("stage-art-body");
+  let html = "", isOk = false;
+  if (name==="extract_pages" || name==="understand_panels"){
+    if (A.pages&&A.pages.length){ html = ic("check",15)+"<span><b>"+A.pages.length+"</b> page image(s) extracted from the PDF.</span>"; isOk=true; }
+    else html = ic("note")+"<span>No page images yet — this stage hasn't run.</span>";
+  } else if (name==="pocket_tts" || name==="voice_timing" || name==="audio_mix"){
+    const narr = A.narration||[];
+    if (narr.length){ html = ic("note")+"<span><b>"+narr.length+"</b> narration audio file(s):<br>"+narr.map(n=>n.split("/").pop()).join(" · ")+"</span>"; isOk=true; }
+    else html = ic("note")+"<span>No narration audio generated yet.</span>";
+  } else if (name==="render_video"){
+    if (A.final_video){ html = ic("check")+"<span>Final video ready — see the Result step to watch and download it.</span>"; isOk=true; }
+    else html = ic("note")+"<span>The finished MP4 lands here once rendering completes.</span>";
+  } else if (name==="quality_check"){
+    if (A.final_video){ html = ic("check")+"<span>Output file present — the quality check has something to validate.</span>"; isOk=true; }
+    else html = ic("note")+"<span>Runs after render to validate the final video.</span>";
+  } else {
+    html = ic("note")+"<span>This stage produces intermediate data consumed by the next stage.</span>";
+  }
+  ab.innerHTML = html; ab.className = "state-line "+(isOk?"ok":"muted");
+  $("stage-status-title").textContent = "Status — "+PIPE[name][1];
+  if (running){
+    renderLog($("stage-output"), (lastJob.output||[]).slice(), true);
+    const c = $("stage-console"); if (c) c.open = true;
+  }
+}
+
+async function api(url, opts){
+  let r;
+  try { r = await fetch(url, opts); }
+  catch(e){ return { error: "cannot reach the local server (" + e.message + ")" }; }
+  try { return await r.json(); }
+  catch(e){ return { error: "bad response from " + url }; }
+}
+
+/* ---------------- icons ---------------- */
+function ic(n, s){
+  const p = {
+    check:"<path d='M4 12.5l5 5L20 6.5'/>",
+    x:"<path d='M6 6l12 12M18 6L6 18'/>",
+    alert:"<path d='M12 4l9 16H3z'/><path d='M12 10v4M12 17h.01'/>",
+    clock:"<circle cx='12' cy='12' r='9'/><path d='M12 7v5l3 2'/>",
+    play:"<path d='M8 5v14l11-7z' fill='currentColor' stroke='none'/>",
+    note:"<path d='M9 18V7l10-2v11'/><circle cx='6.5' cy='17.5' r='2.5'/><circle cx='16.5' cy='16' r='2.5'/>",
+    book:"<path d='M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z'/>",
+    refresh:"<path d='M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6'/>",
+  }[n] || "<circle cx='12' cy='12' r='9'/>";
+  const sz = s || 16;
+  return "<svg viewBox='0 0 24 24' width='"+sz+"' height='"+sz+"' fill='none' stroke='currentColor' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round' aria-hidden='true'>"+p+"</svg>";
+}
+
+/* ---------------- steps / stepper ---------------- */
+function unlock(){
+  const s = statusData || { pdf_exists:false, progress:{done:false}, artifacts:{} };
+  const run2 = !!s.pdf_exists;
+  const run3 = !!s.progress.done || !!s.artifacts.final_video;
+  return { run2, run3 };
+}
+
+function paintStepper(){
+  const p = statusData ? statusData.progress : { completed:0, total:0 };
+  const { run2, run3 } = unlock();
+  const [b1,b2,b3] = ["stp1","stp2","stp3"].map($);
+  b2.disabled = !run2;
+  b3.disabled = !run3; /* step 3 unlocks only once a video exists */
+  b2.classList.toggle("locked", !run2);
+  b3.classList.toggle("locked", !run3);
+  b1.classList.toggle("done", !!statusData && !!statusData.pdf_exists);
+  b2.classList.toggle("done", !!statusData && p.current===null && p.completed>0 && !p.failed.length);
+  b3.classList.toggle("done", !!statusData && !!statusData.artifacts.final_video);
+  const live = statusData && p.current;
+  [b1,b2,b3].forEach(b=>b.classList.toggle("active", b.id==="stp"+step && !(b.id==="stp2"&&!run2)));
+  $("c12").className = "conn" + (run2 ? " onnext" : "");
+  $("c23").className = "conn" + ((run3 || (p.completed===p.total)) ? " on" : (run2 ? " onnext" : ""));
+}
+
+function setStep(n, opts){
+  opts = opts || {};
+  if (n===2 && statusData && !statusData.pdf_exists){ flash("Set up first — add your manga PDF on step 1.", "warn"); return; }
+  const changed = step !== n;
+  step = n;
+  ["step1","step2","step3"].forEach((id,i)=>$(id).classList.toggle("hide", i+1!==n));
+  paintStepper();
+  /* Only scroll to the top on a real step change (or an explicit request).
+     Polling refresh() re-routes to the current step every ~0.8s while a job
+     runs; scrolling then would rip the page out from under the user and make
+     it impossible to read the log or boards while processing. */
+  if ((opts.scroll || changed) && !(n===2 && lastJob && lastJob.running)){
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+}
+
+function flash(msg, kind){
+  const a = $("alert");
+  a.className = "show " + (kind||"err");
+  a.innerHTML = ic(kind==="ok"?"check":kind==="warn"?"alert":"alert") + "<span></span>";
+  a.querySelector("span").textContent = msg;
+}
+
+/* ---------------- refresh: live extraction filmstrip ---------------- */
+let exSig = "";
+async function refreshExtract(){
+  const running = lastJob && lastJob.running;
+  const now = await api("/api/extract" + (running ? "?full=1" : ""));
+  if (!now || now.error) return;
+  const strip = $("exstrip"), panel = $("expanel");
+  const pages = now.pages || [];
+  panel.classList.remove("hide");
+  const n = pages.length;
+  $("exnote").textContent = n ? n + " page" + (n===1?"":"s") + " extracted" : (now.running ? "extracting…" : "nothing yet");
+  const sig = pages.map(p=>p.num+":"+p.pans).join(",") + "|" + (running?1:0);
+  if (sig===exSig) return;
+  exSig = sig;
+  if (!n){
+    strip.innerHTML = '<div class="exempty">No extracted pages on disk yet — run <b>page extraction</b> and watch the filmstrip fill in one by one.</div>';
+    return;
+  }
+  strip.innerHTML = "";
+  pages.forEach((pg, i)=>{
+    const card = document.createElement("div");
+    card.className = "excard" + (i===pages.length-1 && running ? " new" : "");
+    const bust = i===pages.length-1 ? "?t="+Date.now() : "";
+    const pans = (running && pg.panels && pg.panels.length)
+      ? pg.panels.map(c=>'<img loading="lazy" src="'+c.url+bust+'" alt="'+(pg.file.split(".")[0])+"/"+c.name+'">').join("")
+      : '';
+    card.innerHTML =
+      '<div class="expg"><img src="'+pg.url+bust+'" alt="'+pg.file+'"><span class="exnum">page '+pg.num+'</span></div>'+
+      '<div class="exmeta">panel'+(pg.pans!==1?"s":"")+' '+pg.pans+'</div>'+
+      (pans ? '<div class="expan">'+pans+'</div>' : '');
+    strip.appendChild(card);
+  });
+  if (running) strip.scrollLeft = strip.scrollWidth;
+}
+
+/* ---------------- refresh: live panel-cleaning filmstrip ---------------- */
+let clSig = "";
+async function refreshClean(){
+  const running = lastJob && lastJob.running;
+  const now = await api("/api/clean?full=1");
+  if (!now || now.error) return;
+  const strip = $("clstrip"), panel = $("clpanel");
+  const pages = now.pages || [];
+  const whole = pages.length && pages.reduce((a,p)=>a+p.pans,0);
+  const stageRun = running && lastJob.action && lastJob.action==="clean_panels";
+  if (!stageRun && !whole){
+    panel.classList.add("hide");
+    return;
+  }
+  panel.classList.remove("hide");
+  $("clnote").textContent = whole ? whole + " panel" + (whole===1?"":"s") + " cleaned"
+                                : (running ? "cleaning…" : "");
+  const sig = pages.map(p=>p.num+":"+p.pans).join(",") + "|" + (running?1:0);
+  if (sig===clSig) return;
+  clSig = sig;
+  if (!whole){
+    strip.innerHTML = '<div class="exempty">No panels cleaned yet — the <b>panel cleaning</b> stage strips banners, text boxes and SFX from each panel.</div>';
+    return;
+  }
+  strip.innerHTML = "";
+  pages.forEach((pg, i)=>{
+    const card = document.createElement("div");
+    card.className = "excard" + (i===pages.length-1 && running ? " new" : "");
+    const bust = i===pages.length-1 ? "?t="+Date.now() : "";
+    const pans = (pg.panels && pg.panels.length)
+      ? pg.panels.map(c=>{
+          // While cleaning we show the debug overlay (colored boxes over what
+          // was removed); once idle we show the real cleaned visual instead.
+          const src = (running && c.debug ? c.debug : c.url) + bust;
+          return '<img loading="lazy" src="'+src+'" alt="'+pg.file+"/"+c.name+(running&&c.debug?' (debug)':'')+'">';
+        }).join("")
+      : '';
+    const pgurl = (pg.panels && pg.panels[0] && pg.panels[0].url) || "";
+    card.innerHTML =
+      '<div class="expg"><img src="'+pgurl+bust+'" alt="'+pg.file+'"><span class="exnum">page '+pg.num+'</span></div>'+
+      '<div class="exmeta">panel'+(pg.pans!==1?"s":"")+' '+pg.pans+'</div>'+
+      (pans ? '<div class="expan">'+pans+'</div>' : '');
+    strip.appendChild(card);
+  });
+  if (running) strip.scrollLeft = strip.scrollWidth;
+}
+
+/* ---------------- refresh: live panel-understanding filmstrip ---------------- */
+let unSig = "";async function refreshUnderstand(){
+  const running = lastJob && lastJob.running;
+  const now = await api("/api/understand?full=1");
+  if (!now || now.error) return;
+  const strip = $("unstrip"), panel = $("unpanel");
+  const pages = now.pages || [];
+  const whole = pages.length && pages.reduce((a,p)=>a+p.pans,0);
+  const stageRun = running && lastJob.action && lastJob.action==="understand_panels";
+  if (!stageRun && !whole){
+    panel.classList.add("hide");
+    return;
+  }
+  panel.classList.remove("hide");
+  $("unnote").textContent = whole ? whole + " panel" + (whole===1?"":"s") + " understood"
+                                 : (running ? "understanding…" : "");
+  const sig = pages.map(p=>p.num+":"+p.pans).join(",") + "|" + (running?1:0);
+  if (sig===unSig) return;
+  unSig = sig;
+  if (!whole){
+    strip.innerHTML = '<div class="exempty">No panels understood yet — the <b>panel understanding</b> stage reads each panel\u2019s text boxes and events.</div>';
+    return;
+  }
+  strip.innerHTML = "";
+  pages.forEach((pg, i)=>{
+    const card = document.createElement("div");
+    card.className = "excard" + (i===pages.length-1 && running ? " new" : "");
+    const bust = i===pages.length-1 ? "?t="+Date.now() : "";
+    const pans = (pg.panels && pg.panels.length)
+      ? pg.panels.map(c=>{
+          const src = (c.url || "") + bust;
+          return '<img loading="lazy" src="'+src+'" alt="'+pg.file+"/"+c.name+'" title="'+((c.note||"").replace(/"/g,"&quot;"))+'">';
+        }).join("")
+      : '';
+    const pgurl = (pg.panels && pg.panels[0] && pg.panels[0].url) || "";
+    card.innerHTML =
+      '<div class="expg"><img src="'+(pgurl||"")+bust+'" alt="'+pg.file+'"><span class="exnum">page '+pg.num+'</span></div>'+
+      '<div class="exmeta">panel'+(pg.pans!==1?"s":"")+' '+pg.pans+'</div>'+
+      (pans ? '<div class="expan">'+pans+'</div>' : '');
+    strip.appendChild(card);
+  });
+  if (running) strip.scrollLeft = strip.scrollWidth;
+}
+
+/* ---------------- refresh: memory + routing ---------------- */
+let memSig = "";
+async function refreshMemory(){
+  const panel = $("mempanel");
+  if (!panel) return;
+  let mem, ors;
+  try { mem = await api("/api/memory"); } catch(e){ return; }
+  try { ors = await api("/api/omniroute"); } catch(e){ ors = {reachable:false}; }
+  const live = statusData && statusData.memory && statusData.memory.manga;
+  const total = mem && !mem.error
+    ? (mem.characters.length + mem.world.length + mem.story.length + mem.corrections.length + (mem.books||[]).length)
+    : 0;
+  const visible = total > 0 || (live && (live.characters || live.world || live.story || live.corrections || live.books));
+  if (!visible){ panel.classList.add("hide"); return; }
+  panel.classList.remove("hide");
+  $("memnote").textContent = (live && !mem.error) ? total + " record(s) remembered" : "";
+  const counts = $("memcounts");
+  if (mem && !mem.error){
+    counts.className = "state-line muted";
+    counts.innerHTML = ic("book",14)+"<span><b>"+mem.characters.length+"</b> character · <b>"+mem.world.length+"</b> world · <b>"+mem.story.length+"</b> story · <b>"+mem.corrections.length+"</b> corrections · <b>"+(mem.books||[]).length+"</b> book</span>";
+    renderMemList($("memlist"), mem);
+  } else {
+    counts.className = "state-line muted";
+    counts.textContent = "No story memory yet — runs through understanding record characters, places and events.";
+  }
+  const ost = $("orstatus");
+  if (ors && ors.reachable){
+    ost.className = "state-line ok";
+    ost.innerHTML = ic("check",14)+"<span>OmniRoute gateway is up ("+(ors.base_url||"")+")</span>";
+    $("ornote").textContent = "Add providers + generate an API key in the dashboard, then set llm.provider/vlm.provider to 'omniroute' in config."
+  } else {
+    ost.className = "state-line";
+    ost.innerHTML = ic("clock",14)+"<span>OmniRoute gateway not reachable — providers route through the existing local/ollama engines.</span>";
+    $("ornote").textContent = "Start it with `omniroute serve` to enable gateway routing and API-key management.";
+  }
+}
+function renderMemList(el, mem){
+  el.innerHTML = "";
+  const add = (label, recs, cls) => {
+    if (!recs || !recs.length) return;
+    const h = document.createElement("div");
+    h.className = "memgroup";
+    h.innerHTML = "<span class='memlabel "+cls+"'>"+label+"</span>" +
+      recs.slice(0,30).map(r=>{
+        const v = r.value && typeof r.value==="object" ? Object.keys(r.value).map(k=>k+": "+(Array.isArray(r.value[k])?r.value[k].join(", "):r.value[k])).join(" · ") : (r.value||"");
+        const key = encodeURIComponent(r.key);
+        return '<div class="memitem"><span class="memk">'+String(r.key).replace(/</g,"&lt;")+'</span><span class="memv">'+String(v).replace(/</g,"&lt;")+'</span><button class="mini x" title="Delete this record" onclick="deleteMem(\''+key+'\',\''+label.toLowerCase()+'\')">×</button></div>';
+      }).join("");
+    el.appendChild(h);
+  };
+  add("BOOK", mem.books, "bk");
+  add("CHARACTER", mem.characters, "ch");
+  add("WORLD", mem.world, "wo");
+  add("STORY", mem.story, "st");
+  add("CORRECTION", mem.corrections, "co");
+  if (!el.children.length) el.innerHTML = '<div class="exempty">Nothing remembered yet.</div>';
+}
+async function refreshKb(){
+  const panel = $("kbpanel");
+  if (!panel) return;
+  let kb;
+  try { kb = await api("/api/kb"); } catch(e){ return; }
+  if (!kb || kb.status !== "ok" || !kb.manga){
+    panel.classList.add("hide");
+    return;
+  }
+  const st = (s) => (s && s.charAt(0).toUpperCase() + s.slice(1)) || "";
+  const badge = (src) => "<span class=\"badge "+(src||"pdf").toLowerCase()+"\">"+st(src)+"</span>";
+  const stats = kb.stats || {};
+  const anyData = (stats.characters||0) + (stats.locations||0) + (stats.events||0) + (stats.chapters||0) + (kb.summaries||[]).length;
+  if (!anyData && !(kb.conflicts||[]).length){ panel.classList.add("hide"); return; }
+  panel.classList.remove("hide");
+  const note = $("kbnote");
+  if (note) note.textContent = (kb.manga.title||"Manga")+" · "+stats.chapters+" chapters · "+stats.characters+" characters";
+  const counts = $("kbcounts");
+  counts.className = "state-line muted";
+  counts.innerHTML = ic("book",14)+"<span><b>"+stats.chapters+"</b> chapters · <b>"+stats.characters+"</b> characters · <b>"+stats.locations+"</b> locations · <b>"+stats.events+"</b> events · <b>"+(stats.summaries||0)+"</b> summaries · <b>"+(stats.source_evidence||0)+"</b> evidence · <b>"+(stats.conflicts||0)+"</b> verification conflicts</span>";
+
+  const body = $("kbbody");
+  body.innerHTML = "";
+
+  // Processing checkpoints (compact bar)
+  const cpts = kb.checkpoints || [];
+  if (cpts.length){
+    const cpCol = document.createElement("div");
+    cpCol.className = "kbcol";
+    cpCol.style.gridColumn = "1 / -1";
+    const statusIcon = s => s==="completed"?"✓":s==="running"?"↻":s==="failed"?"✗":"·";
+    const statusCls  = s => s==="completed"?"ok":s==="running"?"busy":s==="failed"?"err":"pending";
+    cpCol.innerHTML = "<h3>Processing state</h3><div class='kbcpbar'>"+cpts.map(cp=>{
+      const t = cp.detail ? " — "+String(cp.detail).replace(/</g,"&lt;") : "";
+      return "<div class='kbcp "+statusCls(cp.status)+"'>"
+        +"<span class='kbcpicon'>"+statusIcon(cp.status)+"</span>"
+        +"<span class='kbcpstage'>"+(cp.stage||"?").replace(/_/g," ")+"</span>"
+        +"<span class='kbcpdet'>"+t+"</span>"
+        +"</div>";
+    }).join("")+"</div>";
+    body.appendChild(cpCol);
+  }
+
+  const chapCol = document.createElement("div");
+  chapCol.className = "kbcol";
+  chapCol.innerHTML = "<h3>Chapters</h3>" + ( (kb.chapters||[]).length
+    ? "<div class='kblist'>"+(kb.chapters||[]).map(c=>"<div class='kbcard'><div class='n'>Ch "+c.chapter_number+(c.title?" — "+c.title:"")+"</div><div class='m'>pages "+c.pdf_page_start+"–"+c.pdf_page_end+""+ (c.confidence? " · conf "+Math.round(c.confidence*100)+"%":"") +"</div></div>").join("")+"</div>"
+    : "<div class='kbempty'>No chapter boundaries detected yet.</div>");
+  body.appendChild(chapCol);
+
+  const charCol = document.createElement("div");
+  charCol.className = "kbcol";
+  const chars = (kb.characters||[]).slice().sort((a,b)=>(b.appearance_count||0)-(a.appearance_count||0));
+  charCol.innerHTML = "<h3>Characters</h3>" + (chars.length
+    ? "<div class='kblist'>"+chars.slice(0,40).map(c=>{
+        const srcs=(c.sources||[c.source||"pdf"]);
+        return "<div class='kbcard'><div class='n'>"+String(c.name).replace(/</g,"&lt;")+"</div>"+
+          (c.role? "<div class='roles'>"+String(c.role).replace(/</g,"&lt;")+"</div>":"")+
+          "<div class='m'>"+srcs.map(badge).join("")+"appears "+c.appearance_count+" time(s) · first pg "+(c.first_page||"-")+"</div>"+
+          (c.description? "<p class='m' style='margin-top:3px'>"+String(c.description).replace(/</g,"&lt;")+"</p>":"")+
+        "</div>";
+      }).join("")+"</div>"
+    : "<div class='kbempty'>No characters extracted yet — run through panel understanding.</div>");
+  body.appendChild(charCol);
+
+  const evCol = document.createElement("div");
+  evCol.className = "kbcol";
+  const evs = (kb.events||[]).slice().sort((a,b)=>(a.page||0)-(b.page||0)).slice(0,40);
+  evCol.innerHTML = "<h3>Event timeline</h3>" + (evs.length
+    ? "<div class='kblist'>"+evs.map(e=>{
+        const who = (e.characters||[]).join(", ");
+        return "<div class='kbev'><span class='pg'>p."+e.page+"</span> "+
+          (who? "<b>"+String(who).replace(/</g,"&lt;")+"</b> ":"")+
+          badge(e.source||"pdf")+
+          " "+String(e.description).replace(/</g,"&lt;")+
+          (e.importance>=0.8? " <b title='high importance'>★</b>":"")+
+        "</div>";
+      }).join("")+"</div>"
+    : "<div class='kbempty'>No events extracted yet.</div>");
+  body.appendChild(evCol);
+
+  const conflicts = kb.conflicts || [];
+  if (conflicts.length){
+    const cbox = document.createElement("div");
+    cbox.className = "kbcol";
+    cbox.style.gridColumn = "1 / -1";
+    cbox.innerHTML = "<h3>Verification conflicts (need attention)</h3>" + conflicts.map(cf=>{
+      return "<div class='kbconflict'><div class='t'>"+String(cf.entity_key||"").replace(/</g,"&lt;")+"</div>"+
+        "internet says <b>"+String(cf.value_a||"(none)").replace(/</g,"&lt;")+"</b> but the pages say <b>"+String(cf.value_b||"(none)").replace(/</g,"&lt;")+"</b></div>";
+    }).join("");
+    body.appendChild(cbox);
+  }
+
+  const locs = kb.locations || [];
+  if (locs.length){
+    const locCol = document.createElement("div");
+    locCol.className = "kbcol";
+    locCol.style.gridColumn = "1 / -1";
+    locCol.innerHTML = "<h3>Locations</h3><div class='kblist'>"+locs.slice(0,24).map(l=>{
+      return "<div class='kbcard'><div class='n'>"+String(l.name).replace(/</g,"&lt;")+(l.type? " <span class='m'>("+String(l.type).replace(/</g,"&lt;")+")</span>":"")+"</div><div class='m'>"+badge(l.source||"pdf")+"first pg "+(l.first_page||"-")+" · "+l.appearance_count+" time(s)</div></div>";
+    }).join("")+"</div>";
+    body.appendChild(locCol);
+  }
+}
+async function deleteMem(key, kind){
+  const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"memory_delete", kind:kind, key:key }) });
+  if (r && r.message)
+    if(typeof flash!=='undefined') flash(r.message);
+  refreshMemory();
+}
+
+/* ---------------- refresh: narration + TTS ---------------- */
+let ttsSig = "";
+let ttsDoc = "";   /* currently selected page:scene */
+const _fmtT = sec => sec===null||sec===undefined ? "" :
+  (typeof sec==="number" && !isNaN(sec) ? Number(sec).toFixed(1)+"s" : String(sec));
+const _fmtTs = ts => ts ? new Date(ts*1000).toLocaleString().slice(0, -3) : "";
+async function refreshTTS(){
+  const panel = $("ttspanel");
+  if (!panel) return;
+  let t = await api("/api/tts"); if (!t || t.error){ return; }
+  let scr;
+  try { scr = await api("/api/script"); } catch(e){ scr = { docs:{}, audio:{} }; }
+  if (!scr || scr.error) scr = { docs:{}, audio:{} };
+
+  const running = lastJob && lastJob.running && lastJob.action==="tts_generate";
+  const docs = scr.docs || {};
+  const audio = scr.audio || {};
+  const flatAudio = {};   /* flat manifest index -> per-doc segment rows */
+  const pages = Object.keys(docs).map(Number).sort((a,b)=>a-b);
+  let flat = 0;
+  const segIndex = [];    /* flat position -> [page, scene, segIndex] */
+  pages.forEach(pg=>{
+    Object.keys(docs[pg]).map(Number).sort((a,b)=>a-b).forEach(sc=>{
+      (docs[pg][sc].segments||[]).forEach((seg,i)=>{
+        segIndex.push([pg,sc,i]);
+        flatAudio[flat] = audio[flat] ? { file:audio[flat] } : null;
+        flat++;
+      });
+    });
+  });
+  const hasScripts = segIndex.length > 0;
+  const hasAudio = (t.audio&&t.audio.length) || Object.keys(audio).length;
+  const server = t.server||{};
+  const visible = hasScripts || hasAudio || t.has_manifest || server.reachable
+                || t.loading || running;
+  if (!visible){ panel.classList.add("hide"); return; }
+  panel.classList.remove("hide");
+
+  /* note + server line */
+  const n = t.audio ? t.audio.length : 0;
+  $("ttsnote").textContent = running ? "generating narration…"
+    : (hasAudio ? n + " narration segment(s) ready" :
+       hasScripts ? "scripts written — preview or generate" : "");
+  const st = $("ttsstate");
+  if (server.reachable){
+    st.className = "state-line ok";
+    const pid = server.pid ? " · pid " + server.pid : "";
+    st.innerHTML = ic("check",14)+"<span>Pocket TTS server up — "+(server.url||"")+pid+"</span>";
+  } else if (t.loading){
+    st.className = "state-line warn";
+    st.innerHTML = ic("clock",14)+"<span>Generating narration…</span>";
+  } else {
+    st.className = "state-line muted";
+    st.innerHTML = ic("note",14)+"<span>Pocket TTS server is not running — press <b>Start server</b> to synth fast, or it auto-starts on demand.</span>";
+  }
+  $("ttsprovider").innerHTML = "<b>"+(t.provider||"pocket_tts")+"</b> provider · voice <b>"+(t.voice||"alba")+"</b>" +
+    (t.reference && t.reference.exists ? " · reference voice locked" : " · built-in voices");
+  $("ttsstart").disabled = running || !!server.reachable;
+  $("ttsstop").disabled = running || !server.reachable;
+  $("ttsgen").disabled = running || !hasScripts;
+  $("ttsgenstate").innerHTML = running ? ic("clock",14)+" <span>Synthesizing segments sequentially — the Pocket TTS stage row shows the live one.</span>" : "";
+  fillTTSVoices(t);
+
+  /* scene select */
+  const sel = $("ttsdoc");
+  const key = (pg,sc)=>String(pg)+":"+String(sc);
+  const curKey = sel.value;
+  sel.innerHTML = "";
+  const opts = [];
+  pages.forEach(pg=>{
+    opts.push({ k:key(pg,-1), label:"page "+pg, head:true });
+    Object.keys(docs[pg]).map(Number).sort((a,b)=>a-b).forEach(sc=>{
+      const d = docs[pg][sc];
+      const label = (d.scene_id||"scene "+sc) + " — " + (d.segments||[]).length + " line(s)";
+      opts.push({ k:key(pg,sc), label });
+    });
+  });
+  if (!opts.length){
+    sel.innerHTML = '<option value="">No scene scripts yet — run the Write narration stage.</option>';
+    $("ttssegs").innerHTML = '<div class="qempty">Nothing to edit yet. After <b>Write narration</b> runs, its script lands here and each line can be previewed or regenerated.</div>';
+    return;
+  }
+  opts.forEach(o=>{
+    const el = document.createElement("option");
+    el.value = o.k; el.textContent = o.label;
+    if (o.head) el.disabled = true;
+    sel.appendChild(el);
+  });
+  const pick = (curKey && opts.some(o=>o.k===curKey)) ? curKey : opts.find(o=>!o.head).k;
+  sel.value = pick;
+  if (sel.value !== curKey) renderTTSDocs(docs, segIndex, flatAudio, pick, running);
+  sel.onchange = ()=> renderTTSDocs(docs, segIndex, flatAudio, sel.value, running);
+  ttsDoc = sel.value;
+}
+
+function fillTTSVoices(t){
+  const V = t.server && t.server.voices ? t.server.voices : [];
+  const sel = $("ttsvoice");
+  if (!V.length) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Built-in default voice…</option>' +
+    V.map(v=>'<option value="'+v+'">'+v+'</option>').join("");
+  sel.value = cur || "";
+}
+
+function renderTTSDocs(docs, segIndex, flatAudio, key, running){
+  const [pg, sc] = key.split(":").map(Number);
+  if (!(docs[pg] && docs[pg][sc])) return;
+  const doc = docs[pg][sc];
+  const segs = doc.segments || [];
+  const box = $("ttssegs");
+  const firstFlat = segIndex.findIndex(x=>x[0]===pg && x[1]===sc);
+  box.innerHTML = "";
+  segs.forEach((s, i)=>{
+    const item = document.createElement("div");
+    item.className = "segitem";
+    const est = s.estimated_seconds != null ? " · ~"+_fmtT(s.estimated_seconds) : "";
+    const flatPos = firstFlat + i;
+    const aud = flatAudio[flatPos] && flatAudio[flatPos].file;
+    const player = aud ?
+      '<audio controls preload="none" src="/media/narration/'+encodeURIComponent(aud)+'?t='+Date.now()+'"></audio>' : "";
+    item.innerHTML =
+      '<div class="seghead"><span class="segidx">#'+(i+1)+' · '+(s.segment_id||("s"+(i+1)))+'</span>'+
+      '<span class="segmeta">scene '+String(sc).padStart(3,"0")+est+'</span></div>'+
+      '<textarea class="segtxt" data-i="'+i+'" placeholder="narration text…">'+escHtml(s.text||"")+'</textarea>'+
+      '<div class="row"><button class="btn small" data-prev="'+i+'">Preview line</button>'+
+      '<button class="btn small" data-save="'+i+'">Save edit</button></div>'+
+      player;
+    box.appendChild(item);
+  });
+  if (!segs.length) box.innerHTML = '<div class="qempty">This scene has no narration segments.</div>';
+  box.querySelectorAll("[data-prev]").forEach(b=>{
+    b.onclick = ()=>{
+      const i = Number(b.dataset.prev);
+      const ta = box.querySelector('[data-i="'+i+'"]');
+      runAction("tts_preview", { page:pg, scene:sc, index:i });
+    };
+  });
+  box.querySelectorAll("[data-save]").forEach(b=>{
+    b.onclick = ()=>{
+      const i = Number(b.dataset.save);
+      const ta = box.querySelector('[data-i="'+i+'"]');
+      runAction("script_save", { page:pg, scene:sc, index:i, text:ta.value });
+    };
+  });
+}
+function escHtml(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+/* ---------------- refresh: compulsory manga name -> memory ---------------- */
+async function paintLive(){
+  let live;
+  try { live = await api("/api/live"); } catch(e){ return; }
+  const panel = $("livepanel"), img = $("liveimg");
+  const d = live && (live.live || (live.stage ? live : null));
+  if (!d){
+    if (!(statusData && statusData.memory)) panel.classList.add("hide");
+    return;
+  }
+  panel.classList.remove("hide");
+  const running = lastJob && lastJob.running;
+  const stage = d.stage || (running ? lastJob.action : null);
+  $("livenote").textContent = stage ? (STAGE_LABELS[stage]||stage) : "";
+  let phase = d.phase || (running ? "Working…" : "Paused — resume continues here.");
+  if (d.done !== undefined && d.total) phase += " — " + d.done + " / " + d.total;
+  $("livephase").textContent = phase;
+  if (d.image_url){
+    img.src = d.image_url + "?t=" + Date.now();
+    img.classList.remove("hide");
+    img.title = d.image || "";
+  } else {
+    img.classList.add("hide");
+  }
+  const m = (live && live.memory) || (statusData && statusData.memory);
+  const memline = $("livemem");
+  if (m){
+    const pages = (Array.isArray(m.window) && m.window.length)
+      ? " · recent pages: " + m.window.slice(0,4).join(", ") : "";
+    memline.className = "state-line muted";
+    memline.innerHTML = ic("book",14) + "<span>Project memory — <b>"+m.characters+"</b> character(s), <b>"+m.places+"</b> place(s), <b>"+m.objects+"</b> object(s) remembered across the project"+(m.total_pages_seen?" · "+m.total_pages_seen+" pages seen":"")+pages+"</span>";
+  } else {
+    memline.innerHTML = "";
+  }
+}
+
+/* ---------------- refresh: status ---------------- */
+async function refresh(){
+  const s = await api("/api/status");
+  if (!s || s.error){ return; }
+  statusData = s;
+  const p = s.progress;
+
+  /* mode pill */
+  $("modepill").innerHTML = '<span class="d"></span>' + (s.mode.offline ? "Offline demo" : "Real mode");
+  $("modepill").className = "pill" + (s.mode.offline ? "" : " ok");
+
+  /* status pill */
+  const sp = $("statuspill");
+  sp.className = "pill";
+  if (lastJob && lastJob.running){ sp.className="pill busy"; sp.innerHTML='<span class="d"></span>running '+tick(lastJob.elapsed||0); }
+  else if (p.current){ sp.className="pill busy"; sp.innerHTML='<span class="d"></span>paused at '+(STAGE_LABELS[p.current]||p.current); }
+  else if (p.failed.length){ sp.className="pill"; sp.innerHTML='<span class="d" style="background:var(--err)"></span>stalled'; }
+  else if (p.done && s.artifacts.final_video){ sp.className="pill ok"; sp.innerHTML=ic("check",12)+'complete'; }
+  else { sp.innerHTML=p.completed+'/'+p.total+' stages'; }
+
+  /* slim status line */
+  const mode = s.mode.offline ? "Offline demo — placeholder models, every button works." : "Real mode — configured engines run (they must be installed).";
+  $("specline").innerHTML = "<span><b>Config</b> " + s.config + "</span><span>·</span><span>"+mode+"</span>";
+  if (p.completed===p.total && !p.current && s.artifacts.final_video) $("specline").innerHTML += " · all "+p.total+" stages complete";
+  else if (p.failed.length) $("specline").innerHTML += " · stage "+ (STAGE_LABELS[p.failed[0]]||p.failed[0]) +" ended with an error";
+
+  paintStepper();
+  renderSetup(s);
+  renderRun(s);
+  renderResult(s);
+  refreshExtract();
+  refreshClean();
+  refreshUnderstand();
+  refreshMemory();
+  refreshKb();
+  refreshTTS();
+  refreshProjects();
+  paintLive();
+  if (currentView === "overview"){
+    autoRoute(s);
+    showView(location.hash || "#/overview", s);
+  } else {
+    showView(location.hash, s);
+  }
+}
+
+/* ---------------- step 1 ---------------- */
+function renderSetup(s){
+  const st = $("pdfstate");
+  if (st){
+    if (s.pdf_exists){
+      st.className = "state-line ok";
+      st.innerHTML = "<span>Using <b>"+escHtml((s.pdf||"").split("/").pop())+"</b> ("+s.artifacts.pages.length+" pages, from your config).</span>";
+    } else {
+      st.className = "state-line warn";
+      st.innerHTML = ic("alert") + "<span>No PDF yet — add one below.</span>";
+    }
+  }
+  gateContinue();
+  renderVoice(s);
+}
+
+function renderVoice(s){
+  const v = s.voice || {}, st = $("voicestate");
+  if (v.exists){
+    st.className = "state-line ok";
+    const size = v.bytes ? (v.bytes/1024).toFixed(1)+" KB" : "";
+    st.innerHTML = ic("check") + "<span>Reference voice saved — "+v.name+" ("+size+"). It is used for narration.</span>";
+  } else {
+    st.className = "state-line muted";
+    st.innerHTML = ic("note") + "<span>No voice uploaded yet — previews use the built-in voice.</span>";
+  }
+  /* the demo player shows the uploaded reference, else a generated sample */
+  const sample = s.artifacts && s.artifacts.voice_sample;
+  if (v.url){
+    $("sampleaudio").src = "/media/voice_reference?t="+Date.now();
+    $("sampleaudio").classList.remove("hide");
+    $("samplemeta").textContent = "playing your uploaded voice";
+  } else if (sample){
+    $("sampleaudio").src = "/media/voice_sample?t="+Date.now();
+    $("sampleaudio").classList.remove("hide");
+    $("samplemeta").textContent = "preview ready";
+  } else {
+    $("samplemeta").textContent = "";
+    $("sampleaudio").classList.add("hide");
+  }
+}
+
+/* ---------------- step 2 ---------------- */
+function renderRun(s){
+  const p = s.progress;
+  const running = lastJob && lastJob.running;
+
+  const pct = p.total ? Math.round(100*p.completed/p.total) : 0;
+  $("pct").textContent = pct + "%";
+  $("progbar").style.transform = "scaleX(" + (pct/100) + ")";
+
+  const runbtn = $("btn_run");
+  runbtn.disabled = !s.pdf_exists || running;
+  if (running){
+    runbtn.innerHTML = ic("play",14) + "Working…";
+  } else if (p.done){
+    runbtn.innerHTML = ic("refresh",14) + "Rebuild video from scratch";
+  } else if (p.current || p.failed.length || (p.completed>0 && p.completed<p.total)){
+    runbtn.innerHTML = ic("play",14) + "Resume pipeline from " + (p.current ? p.completed+"/"+p.total : "next");
+  } else {
+    runbtn.innerHTML = ic("play",14) + "Run pipeline";
+  }
+
+  const live = (running && p.live && p.live.stage) ? p.live : null;
+
+  const txt = $("progtext");
+  if (running && live){ txt.textContent = live.phase + " — " + (STAGE_LABELS[lastJob.action] || lastJob.action); }
+  else if (running){ txt.textContent = "Running: " + (STAGE_LABELS[lastJob.action] || lastJob.action); }
+  else if (p.current && !p.failed.length){ txt.textContent = "Paused mid-run on " + (STAGE_LABELS[p.current]||p.current) + " — press Resume to continue."; }
+  else if (p.failed.length){ txt.textContent = "Stage " + (STAGE_LABELS[p.failed[0]]||p.failed[0]) + " failed — resume re-runs it and everything after."; }
+  else if (p.done){ txt.textContent = "Already complete — Run rebuilds every stage and refreshes the video."; }
+  else { txt.textContent = p.completed + " of " + p.total + " stages today — press Run pipeline."; }
+
+  const lb = $("livebox");
+  if (live && (live.done === 0 || live.done) && live.total){
+    lb.classList.remove("hide");
+    const lv = Math.max(0, Math.min(100, live.pct || 0));
+    $("subfill").style.transform = "scaleX(" + (lv/100) + ")";
+    $("subtext").innerHTML = "<b>" + (STAGE_LABELS[live.stage] || live.label || live.stage) + "</b> — " + (live.phase || "");
+    $("subpct").textContent = live.done + " / " + live.total;
+  } else if (live){
+    lb.classList.remove("hide");
+    $("subfill").style.transform = "scaleX(0)";
+    $("subtext").innerHTML = "<b>" + (STAGE_LABELS[live.stage] || live.label || live.stage) + "</b> — " + (live.phase || "");
+    $("subpct").textContent = "";
+  } else {
+    lb.classList.add("hide");
+  }
+
+  $("elapsed").innerHTML = lastJob && lastJob.running
+    ? "<span class='elapsed'>"+ic("clock",14)+" "+tick(lastJob.elapsed||0)+"</span>"
+    : "";
+  $("runnote").textContent = s.artifacts.final_video ? "last video: " + fmtKB(s.artifacts.final_video) : "";
+  $("runsub").textContent = running
+    ? "It is working right now — you can watch the stage board and activity log below."
+    : "Rebuilds the full pipeline from the current PDF — every stage is re-done and the video refreshed.";
+
+  /* stage board */
+  const board = $("stageboard");
+  board.innerHTML = "";
+  (p.stages||[]).forEach(st=>{
+    const done = st.status==="completed", run = st.status==="running", fail = st.status==="failed";
+    const row = document.createElement("div");
+    row.className = "brow" + (done?" done":run?" run":fail?" fail":"");
+    row.style.cursor = "pointer";
+    row.title = "Open the "+(STAGE_LABELS[st.name]||st.label)+" page";
+    row.onclick = ()=>{ location.hash = stageHash(st.name); showView(location.hash, statusData); };
+    const when = done && st.completed_at ? st.completed_at.replace("T"," ").slice(5,19) : (run && st.started_at ? st.started_at.replace("T"," ").slice(5,19) : "");
+    const tag = done ? '<span class="tag ok">done</span>' : run ? '<span class="tag run">running</span>' : fail ? '<span class="tag fail">failed</span>' : '<span class="tag wait">waiting</span>';
+    const rownote = (run && live && live.stage === st.name)
+      ? (live.total ? live.done + " of " + live.total : (live.phase || ""))
+      : (when ? when : "");
+    row.innerHTML = '<span class="dot"></span>'+
+      '<span class="nm"><span class="t">'+(STAGE_LABELS[st.name]||st.label)+'</span><span class="k">'+st.name+'</span></span>'+
+      tag +
+      (rownote ? '<span class="tm">'+rownote+'</span>' : '');
+    board.appendChild(row);
+  });
+  if (board.firstChild) board.firstChild.style.borderTop = "0";
+
+  /* expandable "what's happening now" detail under the running stage */
+  if (live && live.details && Object.keys(live.details).length){
+    const det = document.createElement("div");
+    det.className = "bdetail";
+    det.innerHTML = "<h4>live · "+(STAGE_LABELS[live.stage]||live.stage||"")+"</h4>"+
+      "<dl class='bpair'>"+Object.entries(live.details).map(([k,v])=>{
+        const sv = (v===null||v===undefined)?"":String(v);
+        const capped = sv.length > 220 ? sv.slice(0,220)+"…" : sv;
+        return "<dt>"+escHtml(k)+"</dt><dd>"+escHtml(capped)+"</dd>";
+      }).join("")+"</dl>";
+    const rrow = Array.from(board.children).find(x=>x.classList.contains("run"));
+    if (rrow && rrow.nextSibling) board.insertBefore(det, rrow.nextSibling);
+    else board.appendChild(det);
+  }
+}
+
+/* ---------------- step 3 ---------------- */
+function renderResult(s){
+  const a = s.artifacts;
+  $("resultmeta").textContent = a.final_video ? fmtKB(a.final_video) : "";
+  if (a.final_video){
+    $("videowrap").classList.remove("hide");
+    $("videoempty").classList.add("hide");
+    const v = $("video");
+    if (v.dataset.ver !== a.final_video){ v.src = "/media/final_video?t="+Date.now(); v.dataset.ver = a.final_video; }
+    $("dl-video").href = "/media/final_video?t="+Date.now();
+  } else {
+    $("videowrap").classList.add("hide");
+    $("videoempty").classList.remove("hide");
+  }
+  fillNarration(a);
+  renderMusic(s);
+  renderSfx(s);
+}
+
+function fillNarration(a){
+  const sel = $("narrsel"), audio = $("narratioaudio"), info = $("narinfo");
+  const list = a && a.narration ? a.narration : [];
+  if (list.length){
+    sel.innerHTML = "";
+    list.forEach(n=>{ const o=document.createElement("option"); o.value=n; o.textContent=n; sel.appendChild(o); });
+    sel.classList.remove("hide");
+    audio.src = "/media/narration/"+sel.value+"?t="+Date.now();
+    audio.classList.remove("hide");
+    sel.onchange = ()=>{ audio.src="/media/narration/"+sel.value+"?t="+Date.now(); audio.play(); };
+    info.className="state-line muted";
+    info.innerHTML = ic("note")+"<span>"+list.length+" audio file(s) ready to play</span>";
+  } else {
+    info.className="state-line muted";
+    info.innerHTML = ic("note")+"<span>No narration yet — click Generate narration above.</span>";
+    sel.classList.add("hide"); audio.classList.add("hide");
+  }
+}
+
+function renderMusic(s){
+  const m = s.music, info = $("musicinfo"), list = $("musiclist");
+  if (m.enabled && m.track_exists){
+    info.className = "state-line ok";
+    info.innerHTML = ic("check")+"<span>Track ready — "+(m.track||"").split("/").pop()+" · volume "+(m.volume||0)+". Uploaded or placeholder music plays under the narration on the next mix.</span>";
+  } else if (m.enabled){
+    info.className = "state-line warn";
+    info.innerHTML = ic("alert")+"<span>Music enabled but no track yet — upload one below, drop a file in "+(m.dir||"music")+"/, paste a URL, or generate a placeholder.</span>";
+  } else {
+    info.className = "state-line muted";
+    info.innerHTML = ic("note")+"<span>Music is disabled in this config — files you add here still get saved for when you enable it.</span>";
+  }
+  list.innerHTML = "";
+  (m.files||[]).forEach(n=>{
+    const d = document.createElement("div");
+    d.className = "sfxrow";
+    const row = '<span style="flex:1;font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+n+'</span>'+
+      '<audio controls preload="none" src="'+m.urls[m.files.indexOf(n)]+'?t='+Date.now()+'"></audio>';
+    d.innerHTML = row;
+    list.appendChild(d);
+  });
+}
+
+function renderSfx(s){
+  const fx = s.sfx || {}, info = $("sfxinfo"), list = $("sfxlist");
+  if (fx.enabled){
+    info.className = "state-line ok";
+    info.innerHTML = ic("check")+"<span>SFX enabled — "+(fx.events||0)+" event(s)"+(fx.manifest?" in "+fx.manifest.split("/").pop():"")+". Effects play under the narration on the next mix.</span>";
+  } else {
+    info.className = "state-line muted";
+    info.innerHTML = ic("note")+"<span>SFX is disabled in this config — uploads still save, and you can still generate, for when you enable it.</span>";
+  }
+  list.innerHTML = "";
+  (fx.files||[]).forEach(n=>{
+    const d = document.createElement("div");
+    d.className = "sfxrow";
+    const row = '<span style="flex:1;font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+n+'</span>'+
+      '<audio controls preload="none" src="/media/sfx/'+encodeURIComponent(n)+'?t='+Date.now()+'"></audio>';
+    d.innerHTML = row;
+    list.appendChild(d);
+  });
+}
+
+/* ---------------- routing ---------------- */
+function autoRoute(s){
+  if (currentView !== "overview") return; /* don't rip the user off a stage page */
+  const p = s.progress;
+  const running = lastJob && lastJob.running;
+  if (running){ setStep(2); return; }
+  if (autoAdv && p.done && s.artifacts.final_video){ autoAdv=false; setStep(3); return; }
+}
+
+function tick(sec){
+  sec = Math.max(0, Math.floor(sec||0));
+  const m = Math.floor(sec/60), s2 = sec%60;
+  if (m) return m+"m "+s2+"s";
+  return s2+"s";
+}
+function fmtKB(path){
+  /* unknown size — show the file name only */
+  return (path||"").split("/").pop();
+}
+
+/* ---------------- job polling ---------------- */
+async function pollJob(){
+  const j = await api("/api/job");
+  if (j.error) { setTimeout(pollJob, 1500); return; }
+  const wasRunning = lastJob.running;
+  lastJob = j;
+  const out = $("output");
+  if (j.running){
+    $("statuspill").className="pill busy";
+    $("statuspill").innerHTML='<span class="d"></span>running '+tick(j.elapsed||0);
+    renderLog(out, j.output||[], true);
+    const console = $("console");
+    if (console) console.open = true;
+    const a = $("alert");
+    a.className = "show ok";
+    a.innerHTML = ic("clock") + "<span>Running — " + (STAGE_LABELS[j.action]||j.action||"working") + " &#8230;</span>";
+    refresh();
+    setTimeout(pollJob, 800);
+  } else {
+    const justFinished = wasRunning;
+    if (justFinished){
+      renderLog(out, j.output||[], false);
+      const ok = j.exit_code === 0;
+      if (ok){
+        autoAdv = true;
+        flash("Done — " + (j.action ? (STAGE_LABELS[j.action]||j.action) : "command") + " finished.","ok");
+      } else {
+        const tail = (j.output||[]).slice(-5).join("\n");
+        flash("That command ended with an error (exit "+j.exit_code+").\n"+tail, "err");
+      }
+    }
+    refresh();
+    setTimeout(pollJob, 1800);
+  }
+}
+
+/* ---- clean activity log (replaces the raw console dump) ---- */
+function logTime(){
+  const d = new Date();
+  const p = n => String(n).padStart(2,"0");
+  return p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds());
+}
+
+function renderLog(el, lines, running){
+  if (!lines.length){
+    el.innerHTML = '<div class="logline"><span class="logts">'+logTime()+'</span>'+
+      '<span class="logtxt">'+(running ? "Working…" : "Nothing happening yet.")+'</span></div>';
+    return;
+  }
+  /* keep readable lines, drop the noisy per-page CLI spray headers */
+  const keep = [];
+  for (const raw of lines){
+    const t = String(raw||"").replace(/\r/g,"").trim();
+    if (!t) continue;
+    if (/^MangaExplainer - /.test(t)) continue;
+    if (/^\[?\d+%\]/.test(t) || /^\s*[│└├┌]/.test(t)) continue;   /* progress bar art */
+    keep.push(t);
+  }
+  if (!keep.length){ keep.push(running ? "Working…" : "Finished — no detail captured."); }
+  const last = keep.slice(-60);  /* cap the visible tail */
+  el.innerHTML = last.map((t,i)=>{
+    const isLast = i === last.length-1 && running;
+    return '<div class="logline'+(isLast?" running":"")+'">'+
+      '<span class="logts">'+logTime()+'</span>'+
+      '<span class="logtxt">'+t.replace(/&/g,"&amp;").replace(/</g,"&lt;")+'</span></div>';
+  }).join("");
+  /* follow the newest activity, but only when the user is near the bottom so
+     it never drags the page out from under someone scrolling up to read */
+  if (running){
+    const doc = document.documentElement, near = window.innerHeight + window.scrollY;
+    if (doc.scrollHeight - near < 160 && document.getElementById("console").open){
+      el.scrollIntoView({block:"end", behavior:"smooth"});
+    }
+  }
+}
+/* ---- end clean activity log ---- */
+
+/* ---------------- actions ---------------- */
+async function runAction(action, opt){
+  opt = opt || {};
+  if (action==="reset" && !confirm("Reset all checkpoints? The next Run starts from scratch and re-does every stage.")) return;
+  const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(Object.assign({action:action}, opt)) });
+  if (r.message && ["voice_sample","music_track","sfx_demo","music_fetch","book_fetch","memory_correct","memory_delete","tts_stop","script_save","project_new","project_toggle","project_delete"].includes(action)){
+    flash(r.message, r.started?"ok":"err");
+    refresh();
+    return;
+  }  if (!r.started){
+    flash(r.message || "not started", r.started===false?"warn":"err");
+  } else {
+    flash("Started: " + (STAGE_LABELS[action]||action), "warn");
+  }
+  setTimeout(pollJob, 250);
+}
+
+function doMusicFetch(){
+  const sel = $("musicpreset");
+  const url = $("musicurl").value.trim();
+  const preset = sel.value;
+  if (preset === "_url"){
+    if (!url) return flash("Paste an audio URL first", "warn");
+    runAction("music_fetch", {preset:"", url});
+  } else if (preset){
+    runAction("music_fetch", {preset, url:""});
+  } else {
+    flash("Pick a preset or choose Custom URL", "warn");
+  }
+}
+
+/* ---------------- projects (home screen) ---------------- */
+let projSig = "";
+let projectsCache = [];
+let scanState = { busy:false, detected:"", scanned:false };
+async function refreshProjects(){
+  const grid = $("projgrid");
+  if (!grid) return;
+  let d;
+  try { d = await api("/api/projects"); } catch(e){ return; }
+  if (!d || d.error) return;
+  const projects = d.projects || [];
+  projectsCache = projects;
+  $("projnote").textContent = projects.length ? projects.length + " project(s)" : "no projects yet";
+  const sig = projects.map(p=>p.slug+"|"+JSON.stringify(p.toggles)+"|"+(p.character_images?Object.keys(p.character_images).length:0)).join(",");
+  if (sig !== projSig){ projSig = sig; renderProjects(projects); }
+  renderMemorySection(projects);
+  gateContinue();
+}
+
+function renderProjects(projects){
+  const grid = $("projgrid");
+  grid.innerHTML = "";
+  if (!projects.length){
+    grid.innerHTML = '<div class="qempty" style="grid-column:1/-1">No projects yet — type a manga name above and the app will fetch its facts, character pictures and cover into memory.</div>';
+    return;
+  }
+  projects.forEach(p=>{
+    const cover = p.cover_url
+      ? '<img src="'+p.cover_url+'" alt="cover" loading="lazy">'
+      : '<span>✕</span>';
+    let chars = "";
+    const names = (p.characters || []).map(c=>Array.isArray(c)?c[0]:c);
+    const imgs = p.character_images || {};
+    (p.characters||[]).forEach(c=>{
+      const nm = Array.isArray(c)?c[0]:c;
+      const url = Array.isArray(c)?c[1]:imgs[nm];
+      chars += url
+        ? '<span class="pchar" title="'+escHtml(nm)+'"><img src="'+url+'" alt="'+escHtml(nm)+'" loading="lazy"></span>'
+        : '<span class="pchar charname">'+escHtml(nm)+'</span>';
+    });
+    if (!chars) chars = '<span class="pchar charname">no characters yet</span>';
+    const tts = !!(p.toggles && p.toggles.tts);
+    const mus = !!(p.toggles && p.toggles.music);
+    const card = document.createElement("div");
+    card.className = "pcard";
+    card.innerHTML =
+      '<div class="pcover">'+cover+'</div>'+
+      '<div class="pbody">'+
+        '<div class="pname">'+escHtml(p.name)+'</div>'+
+        '<div class="pchars">'+chars+'</div>'+
+        '<div class="ptogg">'+
+          '<label class="tg"><input type="checkbox" data-slug="'+escHtml(p.slug)+'" data-key="tts" '+(tts?'checked':'')+'> Narration</label>'+
+          '<label class="tg"><input type="checkbox" data-slug="'+escHtml(p.slug)+'" data-key="music" '+(mus?'checked':'')+'> Music</label>'+
+        '</div>'+
+      '</div>'+
+      '<div class="pfoot">'+
+        '<span class="head-note">'+ (p.memory? p.memory.books+' book · '+p.memory.characters+' chars':'') +'</span>'+
+        '<button class="pdel" data-del="'+escHtml(p.slug)+'" title="Remove project">✕ remove</button>'+
+      '</div>';
+    grid.appendChild(card);
+  });
+  grid.querySelectorAll(".ptogg input").forEach(inp=>{
+    inp.onchange = ()=> runAction("project_toggle", {slug: inp.dataset.slug, key: inp.dataset.key, value: inp.checked});
+  });
+  grid.querySelectorAll("[data-del]").forEach(b=>{
+    b.onclick = ()=>{
+      if (!confirm("Remove this project from the home screen? (memory + images stay on disk)")) return;
+      runAction("project_delete", {slug: b.dataset.del});
+    };
+  });
+}
+
+function renderMemorySection(projects){
+  const sec = $("memsection");
+  if (!sec) return;
+  const p = projects[0]; // most recent = active project shown in the memory section
+  const nb = $("memnbite");
+  if (!p || !p.memory || (!p.memory.books && !p.memory.characters)){
+    nb.textContent = "no manga memory yet";
+    sec.innerHTML = '<div class="qempty">Fetch a project (above) to build its memory — character names, cover image and all the fetched facts appear here, viewable in one click.</div>';
+    return;
+  }
+  nb.textContent = p.memory.books + " book · " + p.memory.characters + " characters";
+  const name = p.name || "";
+  const book = p.book || {};
+  const meta = [book.year, book.status, (book.authors||[]).join(", "), (book.genres||[]).join(", ")].filter(Boolean).join(" · ");
+  const hero = '<div class="memhero">'+
+    (p.cover_url?'<img src="'+p.cover_url+'" alt="cover">':'<img src="" alt="" style="opacity:.25">')+
+    '<div class="membody">'+
+      '<div class="memtitle">'+escHtml(name)+'</div>'+
+      '<div class="memmeta">'+escHtml(meta || "info fetched from the internet")+'</div>'+
+      (book.synopsis ? '<div class="memmeta">'+escHtml(String(book.synopsis).slice(0,240))+'…</div>' : '')+
+    '</div></div>';
+  let chars = "";
+  if ((p.character_images && Object.keys(p.character_images).length) || (p.characters||[]).length){
+    const roleBy = {};
+    (p.cast||[]).forEach(c=>{ if(c&&c.name) roleBy[String(c.name).toLowerCase()]=c.role||""; });
+    chars = '<div class="subhead" style="margin-top:6px">Characters'+
+      (p.volume?' <span class="ptag">vol '+escHtml(p.volume)+'</span>':'')+
+      '</div><div class="memchars">'+
+      (p.characters||[]).map(c=>{
+        const nm = Array.isArray(c)?c[0]:c;
+        const url = Array.isArray(c)?c[1]:((p.character_images||{})[nm]);
+        const role = roleBy[String(nm).toLowerCase()] || "";
+        return '<div class="memchar">'+(url?'<img src="'+url+'" alt="'+escHtml(nm)+'" loading="lazy">':'<img src="" alt="" style="opacity:0">')+
+          '<span class="mcname">'+escHtml(nm)+'</span>'+
+          (role?'<span class="mcrole">'+escHtml(role)+'</span>':'')+
+          '</div>';
+      }).join("") + '</div>';
+    const sc = (p.series_cast||[]).filter(c=>c && c.name);
+    const primaryNames = new Set((p.characters||[]).map(c=>String((Array.isArray(c)?c[0]:c)||"").toLowerCase()));
+    const extra = sc.filter(c=> c.name && !primaryNames.has(String(c.name).toLowerCase()));
+    if (extra.length){
+      chars += '<details class="coll seriesroster" style="margin-top:10px"><summary>Full series roster · '+
+        extra.length+' more <span class="head-note">(not in this volume)</span></summary>'+
+        '<div class="coll-body" style="display:flex; flex-wrap:wrap; gap:6px; padding-top:8px">'+
+        extra.map(c=>'<span class="ptag flat">'+escHtml(c.name)+'</span>').join("")+
+        '</div></details>';
+    }
+  }
+  sec.innerHTML = hero + chars;
+}
+
+async function doProjectCreate(){
+  const inp = $("projname"), btn = $("projcreate"), out = $("projout");
+  const t = inp ? inp.value.trim() : "";
+  if (!t) return flash("Type the manga's name first", "warn");
+  if (btn) btn.disabled = true;
+  if (out){ out.classList.remove("hide"); out.className = "state-line muted"; out.textContent = "Fetching \""+t+"\" facts, character pictures and cover …"; }
+  const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"project_new", title:t }) });
+  if (btn) btn.disabled = false;
+  if (out){
+    if (r && r.message){
+      out.className = "state-line " + (r.started ? "ok" : "");
+      out.textContent = r.message;
+    } else { out.classList.add("hide"); }
+  }
+  flash(r && r.message ? r.message : "project created", r && r.started ? "ok" : "err");
+  projSig = ""; refresh();
+  if (r && r.started) setStep(2);
+}
+
+/* Auto-identify: scan the PDF -> build the project (no typing). */
+async function loadScan(){
+  const line = $("scanline"), btn = $("btn_scan"), meta = $("scanmeta");
+  const out = $("scanout"), manual = $("manualwrap");
+  if (scanState.scanned) return;
+  scanState.busy = true;
+  if (btn) btn.disabled = true;
+  if (line){ line.className = "state-line"; line.innerHTML = "<b>Scanning your PDF (cover + first pages)…</b>"; }
+  const r = await api("/api/scan");
+  scanState.busy = false;
+  scanState.scanned = true;
+  const manualShow = (msg) => {
+    if (manual){ manual.classList.remove("hide"); }
+    if (line){ line.className = "state-line warn"; line.innerHTML = "<span><b>"+escHtml(msg||"Could not detect the manga from the PDF.")+"</b> — type its name below to continue.</span>"; }
+    if (out) out.classList.add("hide");
+    if (btn) btn.classList.add("hide");
+  };
+  if (r && r.error){
+    manualShow("Could not scan the PDF ("+r.error+")");
+  } else if (r && r.title){
+    const src = r.source==="metadata" ? "PDF metadata" : (r.source==="embedded-text" ? "cover text" : "PDF");
+    if (line){ line.className = "state-line ok"; line.innerHTML = ic("check")+"<span>Found: <b>"+escHtml(r.title)+"</b> — "+r.page_count+" pages, read from "+src+".</span>"; }
+    if (meta){ meta.textContent = "detected automatically"; }
+    if (btn){ btn.classList.remove("hide"); btn.disabled = false; }
+    if (manual){ manual.classList.add("hide"); }
+  } else {
+    manualShow(r && r.reason ? r.reason : "Could not detect the manga from the PDF.");
+  }
+}
+
+async function doProjectScan(){
+  const btn = $("btn_scan"), out = $("scanout"), line = $("scanline");
+  if (!btn) return;
+  btn.disabled = true;
+  btn.innerHTML = "Reading your PDF + fetching facts &amp; pictures…";
+  if (out){ out.classList.remove("hide"); out.className = "state-line muted"; out.textContent = "Building your project automatically…"; }
+  const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"project_scan" }) });
+  btn.disabled = false;
+  btn.innerHTML = "Build my manga from this PDF";
+  if (out){
+    if (r && r.message){
+      out.className = "state-line " + (r.started ? "ok" : "");
+      out.textContent = r.message;
+    } else { out.classList.add("hide"); }
+  }
+  flash(r && r.message ? r.message : "project built from PDF", r && r.started ? "ok" : "err");
+  if (r && r.started){ scanState.scanned = true; if (line){ line.className="state-line ok"; } }
+  projSig = ""; refresh();
+  /* a built project + an existing PDF satisfies step 2's gate: proceed to Run */
+  if (r && r.started) setStep(2);
+}
+
+async function doClearAll(){
+  if (!confirm("Clear ALL projects, manga memory and fetched images? Your PDF and settings stay. This cannot be undone.")) return;
+  const btn = $("btn_clear");
+  if (btn) btn.disabled = true;
+  const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"clear_all" }) });
+  if (btn) btn.disabled = false;
+  flash(r && r.message ? r.message : "cleared", r && r.started ? "ok" : "err");
+  scanState.scanned = false; scanState.detected = "";
+  projSig = ""; refresh();
+}
+
+async function doClearCache(){
+  if (!confirm("Delete all generated run artifacts (pages, panels, OCR, script, audio, final video…)?\nYour projects, memory, PDF and voice clip stay.")) return;
+  const btn = $("btn_clear_cache");
+  if (btn) btn.disabled = true;
+  const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ action:"clear_cache" }) });
+  if (btn) btn.disabled = false;
+  flash(r && r.message ? r.message : "cache cleared", r && r.started ? "ok" : "err");
+  refresh();
+}
+
+/* Step-1 continue is enabled only once a PDF is present AND a project exists. */
+function gateContinue(){
+  const cb = $("continuebtn");
+  if (!cb) return;
+  const pdfOk = !!(statusData && statusData.pdf_exists);
+  const hasProj = !!(projectsCache && projectsCache.length);
+  cb.disabled = !pdfOk || !hasProj;
+  cb.title = hasProj ? "" : "Scan & build your project first (or type its name).";
+}
+
+function uploadFile(file, endpoint, field, onDone){
+  const fd = new FormData(); fd.append(field, file);
+  onDone({ busy:file.name });
+  api(endpoint, { method:"POST", body:fd }).then(r=>{
+    if (r.error){ onDone({ error:r.error }); return; }
+    onDone({ ok:r });
+    refresh();
+  });
+}
+
+function bindDrop(drop, input, handler){
+  const open = ()=>{ if (!input.disabled) input.click(); };
+  drop.addEventListener("click", open);
+  drop.addEventListener("keydown", e=>{ if (e.key==="Enter"||e.key===" "){ e.preventDefault(); open(); } });
+  drop.addEventListener("dragover", e=>{ e.preventDefault(); drop.classList.add("drag"); });
+  drop.addEventListener("dragleave", ()=> drop.classList.remove("drag"));
+  drop.addEventListener("drop", e=>{
+    e.preventDefault(); drop.classList.remove("drag");
+    if (e.dataTransfer.files.length) handler(e.dataTransfer.files[0]);
+  });
+  input.addEventListener("change", ()=>{ if (input.files.length) handler(input.files[0]); input.value=""; });
+}
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  buildStageBar();
+  window.addEventListener("hashchange", ()=>showView(location.hash, statusData));
+  $("stageback").onclick = ()=>{ location.hash = "#/overview"; };
+  refresh();
+  pollJob();
+
+  /* stepper nav */
+  $("stp1").onclick = ()=>setStep(1);
+  $("stp2").onclick = ()=>setStep(2);
+  $("stp3").onclick = ()=>setStep(3);
+  $("continuebtn").onclick = ()=>setStep(2);
+
+  /* auto-identify + clear-all (home screen) */
+  if ($("btn_scan")) $("btn_scan").onclick = doProjectScan;
+  if ($("btn_clear")) $("btn_clear").onclick = doClearAll;
+  if ($("btn_clear_cache")) $("btn_clear_cache").onclick = doClearCache;
+  loadScan();
+
+  /* setup uploads */
+  const pdfBusy = m => { const st=$("pdfstate");
+    if (m.error){ st.className="state-line err"; st.innerHTML= ic("x")+"<span>Upload failed: "+m.error+"</span>"; }
+    else if (m.busy){ st.className="state-line muted"; st.innerHTML= ic("note")+"<span>Uploading "+m.busy+"…</span>"; }
+    else {
+      st.className="state-line ok"; st.innerHTML= ic("check")+"<span>PDF saved — "+(m.ok.pdf||"").split("/").pop()+" ("+Math.round(m.ok.bytes/1024)+" KB)</span>";
+      /* a new PDF means a fresh auto-identify */
+      scanState.scanned = false; scanState.detected = "";
+      projSig = ""; loadScan(); refresh();
+    }
+  };
+  const pdfInput = $("pdffile");
+  if (pdfInput) pdfInput.addEventListener("change", ()=>{
+    if (pdfInput.files.length){
+      const f = pdfInput.files[0];
+      const fd = new FormData(); fd.append("pdf", f);
+      pdfBusy({ busy: f.name });
+      api("/api/pdf", { method:"POST", body:fd }).then(r=>{
+        if (r.error){ pdfBusy({ error:r.error }); } else { pdfBusy({ ok:r }); }
+      });
+    }
+    pdfInput.value = "";
+  });
+
+  const voiceBusy = m => { const st=$("voicestate");
+    if (m.error){ st.className="state-line err"; st.innerHTML= ic("x")+"<span>Upload failed: "+m.error+"</span>"; }
+    else if (m.busy){ st.className="state-line muted"; st.innerHTML= ic("note")+"<span>Uploading "+m.busy+"…</span>"; }
+    else { st.className="state-line ok"; st.innerHTML= ic("check")+"<span>Voice saved — now used as the narration reference voice.</span>"; }
+  };
+  bindDrop($("vdrop"), $("vfile"), f=>uploadFile(f, "/api/voice", "voice", voiceBusy));
+
+  /* music + sfx uploads (step 3) */
+  const musicBusy = m => { const st=$("musicinfo");
+    if (m.error){ st.className="state-line err"; st.innerHTML= ic("x")+"<span>Upload failed: "+m.error+"</span>"; }
+    else if (m.busy){ st.className="state-line muted"; st.innerHTML= ic("note")+"<span>Uploading "+m.busy+"…</span>"; }
+    else { st.className="state-line ok"; st.innerHTML= ic("check")+"<span>Track saved — "+m.ok.name+" ("+Math.round(m.ok.bytes/1024)+" KB). Used by the next mix.</span>"; }
+  };
+  bindDrop($("musicdrop"), $("musicfile"), f=>uploadFile(f, "/api/audio", "track", musicBusy));
+
+  $("musicpreset").addEventListener("change", ()=>{
+    $("musicurl").classList.toggle("hide", $("musicpreset").value !== "_url");
+  });
+
+  const sfxBusy = m => { const st=$("sfxinfo");
+    if (m.error){ st.className="state-line err"; st.innerHTML= ic("x")+"<span>Upload failed: "+m.error+"</span>"; }
+    else if (m.busy){ st.className="state-line muted"; st.innerHTML= ic("note")+"<span>Uploading "+m.busy+"…</span>"; }
+    else { st.className="state-line ok"; st.innerHTML= ic("check")+"<span>SFX saved — "+m.ok.name+" ("+Math.round(m.ok.bytes/1024)+" KB).</span>"; }
+  };
+  bindDrop($("sfxdrop"), $("sfxfile"), f=>uploadFile(f, "/api/sfx", "fx", sfxBusy));
+
+  /* demo voice preview */
+  $("btn_sample").onclick = async ()=>{
+    const r = await api("/api/run", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({action:"voice_sample"}) });
+    setTimeout(()=>{
+      const a = $("sampleaudio");
+      a.src = statusData && statusData.voice && statusData.voice.url ? "/media/voice_reference?t="+Date.now() : "/media/voice_sample?t="+Date.now();
+      a.classList.remove("hide");
+      a.play().catch(()=>{});
+      $("samplemeta").textContent = "preview ready";
+      if (!r || !r.started) flash(r&&r.message||"preview generated","ok");
+      refresh();
+    }, 700);
+  };
+  /* step 2 controls */
+  $("btn_run").onclick = run;
+  $("btn_reset").onclick = ()=>{ runAction("reset"); };
+  async function run(){
+    $("btn_run").disabled = true;
+    await runAction("start", { force:true });
+  }
+  const memaddbtn = $("memaddbtn");
+  if (memaddbtn){
+    memaddbtn.onclick = ()=>{
+      const kind = $("mcckind").value.trim() || "fact";
+      const target = $("mctarget").value.trim();
+      const correction = $("mccorr").value.trim();
+      if (!target || !correction) return flash("Fill in both the target and the correction", "warn");
+      runAction("memory_correct", { kind, target, correction, key:target });
+      $("mctarget").value = ""; $("mccorr").value = "";
+    };
+  }
+
+  /* narration + TTS panel */
+  const ttsstart = $("ttsstart");
+  if (ttsstart){
+    ttsstart.onclick = ()=> runAction("tts_start");
+    $("ttsstop").onclick = ()=> runAction("tts_stop");
+    $("ttsgen").onclick = ()=> runAction("tts_generate");
+    $("ttsvoice").onchange = ()=>{
+      /* store choice for the next preview/generate (sent from the seg buttons' event caller) */
+      window.__ttsVoice = $("ttsvoice").value;
+    };
+  }
+
+  /* compulsory manga-name panel */
+  /* home-screen projects */
+  const projcreate = $("projcreate");
+  if (projcreate){
+    projcreate.onclick = ()=> doProjectCreate();
+    $("projname").onkeydown = e=>{ if (e.key==="Enter") doProjectCreate(); };
+  }
+
+  /* global data-action buttons */
+  document.addEventListener("click", e=>{
+    const b = e.target.closest("[data-action]");
+    if (!b) return;
+    e.preventDefault();
+    runAction(b.dataset.action);
+  });
+});
+</script>
+</body>
+</html>

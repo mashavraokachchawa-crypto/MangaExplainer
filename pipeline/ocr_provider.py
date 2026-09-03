@@ -6,10 +6,14 @@ confidence when the underlying engine exposes them:
 
   [{"text": ..., "bbox": [x, y, width, height], "confidence": ...}]
 
-Selection order: Tesseract (if the binary is installed), lightweight
-PaddleOCR only if it is importable, and a deterministic "dummy" engine for
-tests. None of these is downloaded or installed here; if no engine is
-available, create_provider reports OCR engine unavailable.
+Selection order (auto): manga_ocr (Japanese-manga specialized, runs on the
+already-installed torch - also the only real option on CPUs without AVX,
+where paddlepaddle crashes), then Tesseract if its binary is found, and a
+deterministic "dummy" engine for tests. None of these is downloaded or
+installed here; if no engine is available, create_provider reports OCR
+engine unavailable. PaddleOCR stays registered for AVX-capable machines but
+is NOT part of the auto fallback chain because PaddleOCRProvider::available()
+only reports an installed import - see the class for details.
 """
 import csv
 import io
@@ -52,19 +56,46 @@ class TesseractProvider:
     name = "tesseract"
 
     def __init__(self, cfg):
+        self.binary = str(getattr(cfg.ocr, "binary", "") or "tesseract")
         self.language = str(cfg.ocr.language)
         self.psm = int(cfg.ocr.psm)
         self.timeout = int(cfg.ocr.timeout_seconds)
+        self.env = self._env_for_binary(Path(self.binary))
 
     @staticmethod
-    def available():
-        return shutil.which("tesseract") is not None
+    def _env_for_binary(binary):
+        """Env for a root-less extracted .deb install of tesseract.
+
+        A system package needs nothing extra. A locally extracted build (like
+        ~/manga_tools/tesseract) keeps its shared libs and tessdata next to
+        the binary; without LD_LIBRARY_PATH the subprocess dies with
+        "error while loading shared libraries". Best effort: only override
+        when the sibling lib dir really exists.
+        """
+        base = binary.parent.parent.parent
+        lib = base / "usr/lib/x86_64-linux-gnu"
+        if not lib.is_dir():
+            return None
+        env = dict(os.environ)
+        existing = env.get("LD_LIBRARY_PATH", "")
+        env["LD_LIBRARY_PATH"] = f"{lib}" + (f":{existing}" if existing else "")
+        tessdata = base / "usr/share/tesseract-ocr/5/tessdata"
+        if tessdata.is_dir():
+            env["TESSDATA_PREFIX"] = str(tessdata)
+        return env
+
+    @staticmethod
+    def available(cfg=None):
+        binary = "tesseract"
+        if cfg is not None:
+            binary = str(getattr(cfg, "binary", "") or binary)
+        return shutil.which(binary) is not None
 
     def recognize(self, image_path):
         try:
             proc = subprocess.run(
                 [
-                    "tesseract", str(image_path), "stdout",
+                    self.binary, str(image_path), "stdout",
                     "-l", self.language,
                     "--psm", str(self.psm),
                     "tsv",
@@ -72,6 +103,7 @@ class TesseractProvider:
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
+                env=self.env,
             )
         except FileNotFoundError:
             raise OCREngineUnavailable("tesseract binary not found") from None
@@ -141,7 +173,7 @@ class PaddleOCRProvider:
         self.timeout = int(cfg.ocr.timeout_seconds)
 
     @staticmethod
-    def available():
+    def available(cfg=None):
         try:
             import paddleocr  # noqa: F401
 
@@ -201,6 +233,67 @@ class PaddleOCRProvider:
         return []
 
 
+class MangaOCRProvider:
+    """Japanese-manga-specialized OCR (kha-white/manga-ocr) on PyTorch.
+
+    The pipeline targets machines that may lack AVX (where paddlepaddle
+    crashes with SIGILL); manga-ocr runs a ViT encoder-decoder on the already
+    installed torch and handles the vertical, stylized text that generic OCR
+    misses. manga-ocr exposes no per-line bounding boxes, so each panel is
+    reported as ONE block spanning the whole panel - that is enough for block
+    classification and the combined_text the analysis stage consumes.
+
+    The model is heavy to load (> 1 minute on constrained CPUs), and the
+    pipeline instantiates a fresh provider per panel, so the engine is cached
+    as a module-level singleton and loaded exactly once per process.
+    """
+
+    name = "manga_ocr"
+
+    _ENGINE = None
+
+    def __init__(self, cfg):
+        self.threads = max(1, int(getattr(cfg.ocr, "cpu_threads", 2) or 2))
+        self.confidence = float(getattr(cfg.ocr, "confidence", 0.95) or 0.95)
+
+    @staticmethod
+    def available(cfg=None):
+        try:
+            import importlib.util
+
+            return importlib.util.find_spec("manga_ocr") is not None
+        except (ImportError, ValueError):
+            return False
+
+    def _engine(self):
+        if MangaOCRProvider._ENGINE is None:
+            import torch
+            from manga_ocr import MangaOcr
+
+            torch.set_num_threads(self.threads)
+            MangaOCRProvider._ENGINE = MangaOcr()
+        return MangaOCRProvider._ENGINE
+
+    def recognize(self, image_path):
+        from PIL import Image
+
+        mocr = self._engine()
+        img = Image.open(str(image_path))
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        text = mocr(img)
+        if not text:
+            return []
+        width, height = img.size
+        return [
+            {
+                "text": text,
+                "bbox": [0, 0, width, height],
+                "confidence": self.confidence,
+            }
+        ]
+
+
 class DummyProvider:
     """Deterministic in-process engine for tests / offline smoke runs."""
 
@@ -210,7 +303,7 @@ class DummyProvider:
         pass
 
     @staticmethod
-    def available():
+    def available(cfg=None):
         return True
 
     def recognize(self, image_path):
@@ -224,6 +317,7 @@ class DummyProvider:
 
 
 PROVIDERS = {
+    "manga_ocr": MangaOCRProvider,
     "tesseract": TesseractProvider,
     "paddleocr": PaddleOCRProvider,
     "dummy": DummyProvider,
@@ -240,15 +334,15 @@ def create_provider(cfg):
                 f"(expected auto or one of {', '.join(PROVIDERS)})"
             )
         cls = PROVIDERS[requested]
-        if not cls.available():
+        if not cls.available(cfg.ocr if requested == "tesseract" else None):
             raise OCREngineUnavailable(f"OCR engine '{requested}' is not available")
         return cls(cfg)
     # auto: real engines only - never silently fall back to the dummy
-    for name in ("tesseract", "paddleocr"):
+    for name in ("manga_ocr", "tesseract"):
         cls = PROVIDERS[name]
-        if cls.available():
+        if cls.available(cfg.ocr if name == "tesseract" else None):
             LOG.info("using OCR engine: %s", name)
             return cls(cfg)
     raise OCREngineUnavailable(
-        "no OCR engine available (install tesseract, or set ocr.engine=dummy)"
+        "no OCR engine available (install manga-ocr, or set ocr.engine=dummy)"
     )

@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """MangaExplainer CLI - low-RAM manga explanation video pipeline skeleton.
 
-Commands:
-    python main.py status         show configuration and pipeline progress
-    python main.py resume         resume from the last checkpoint (crash-safe)
-    python main.py clean-cache    delete derived artifacts and checkpoints
+Simple interface (Task 28):
+    python main.py start          run the complete chain: Manga -> final MP4
+    python main.py resume         continue from the last completed step
+    python main.py status         show pipeline progress and next step
+    python main.py render         render the video
+    python main.py check          quality-check the output video
+    python main.py clean          clear cache/derived artifacts (keeps checkpoints)
+
+Advanced/per-stage commands:
+    python main.py clean-cache    delete derived artifacts/cache (keeps checkpoints)
     python main.py ocr --page N --panel M
                                   OCR a single detected panel
     python main.py analyze --page N --panel M
@@ -21,6 +27,8 @@ Commands:
                                   build the visual timeline for one scene
     python main.py crops --page N --scene M
                                   compute 16:9 cinematic crops for one scene
+    python main.py match --page N [--all] [--force]
+                                  deterministic panel <-> narration mapping
 """
 import argparse
 import sys
@@ -31,7 +39,6 @@ sys.path.insert(0, str(ROOT))
 
 from config.loader import load_config
 from logger import setup_logging
-from pipeline.runner import PipelineRunner
 from pipeline.stages import STAGES
 
 STAGE_NAMES = [s.name for s in STAGES]
@@ -41,6 +48,7 @@ def ensure_dirs(cfg):
     paths = {
         Path(cfg.output.dir),
         Path(cfg.pipeline.state.dir),
+        Path(cfg.pipeline.checkpoints.dir),
         Path(cfg.logging.log_dir),
         Path(cfg.pipeline.cache.dir),
         Path(cfg.input.pdf).parent,
@@ -57,39 +65,27 @@ def ensure_dirs(cfg):
     paths.add(Path(cfg.output.audio_dir))
     paths.add(Path(cfg.output.shots_dir))
     paths.add(Path(cfg.output.crops_dir))
+    paths.add(Path(cfg.output.matching_dir))
     for path in paths:
         path.mkdir(parents=True, exist_ok=True)
-
-
-def _print_stage_table(state):
-    width = max(len(name) for name in STAGE_NAMES)
-    rows = {row["name"]: row["status"] for row in state.summary()}
-    print(f"  stages ({len(STAGE_NAMES)}):")
-    for name in STAGE_NAMES:
-        print(f"    {name:<{width}}  {rows.get(name, 'pending')}")
 
 
 def cmd_status(cfg):
     ensure_dirs(cfg)
     from state import State
-
-    state = State(STAGE_NAMES, cfg.pipeline.state.dir)
-    print("MangaExplainer pipeline - status")
+    from pipeline.run_pipeline import STAGE_NAMES, PIPELINE_STAGES
+    state = State(STAGE_NAMES, cfg.pipeline.checkpoints.dir)
+    total = len(STAGE_NAMES)
+    rows = {r["name"]: r["status"] for r in state.summary()}
+    print("MangaExplainer - status")
     print(f"  input PDF        : {cfg.input.pdf}")
     print(f"  output dir       : {cfg.output.dir}")
-    print(f"  image resolution : {cfg.images.resolution}")
-    print(f"  video resolution : {cfg.video.resolution} @ {cfg.video.fps} fps")
-    print(f"  batch size       : {cfg.pipeline.batch_size}  (low-RAM mode)")
-    print(f"  cache dir        : {cfg.pipeline.cache.dir}")
-    print(f"  memory guard     : {cfg.memory.guard_mb} MB")
     print(f"  checkpoint file  : {state.path}")
-    if state.exists():
-        print(
-            f"  pipeline state   : {state.completed_count()}/{len(STAGE_NAMES)} stages completed"
-        )
-    else:
-        print("  pipeline state   : fresh (no checkpoint yet)")
-    _print_stage_table(state)
+    print(f"  progress         : {state.completed_count()}/{total} stages "
+          f"({round(100 * state.completed_count() / total)}%)")
+    width = max(len(name) for name in STAGE_NAMES)
+    for name, label in PIPELINE_STAGES:
+        print(f"    {name:<{width}}  {rows.get(name, 'pending')}  ({label})")
     nxt = state.next_pending()
     print(f"  next stage       : {nxt or '(none - complete)'}")
     return 0
@@ -97,26 +93,26 @@ def cmd_status(cfg):
 
 def cmd_resume(cfg):
     ensure_dirs(cfg)
-    log = setup_logging(cfg)
-    from state import State
-
-    state = State(STAGE_NAMES, cfg.pipeline.state.dir)
-    runner = PipelineRunner(cfg, state)
-    nxt = state.next_pending()
-    if nxt is None:
-        print("resume: all stages are complete; nothing to do.")
-        return 0
-    print(f"resume: picking up from stage '{nxt}'")
-    ok, detail = runner.resume()
-    log.info("resume attempt -> ok=%s stage=%s detail=%s", ok, nxt, detail)
-    print(f"resume: {detail}")
+    setup_logging(cfg)
+    from pipeline.run_pipeline import run_pipeline
+    print("MangaExplainer - resume (continue from last completed step; "
+          "completed work is never redone)")
+    result = run_pipeline(cfg, ROOT, force=False)
+    if result["status"] == "error":
+        print(f"\n  ERROR: {result.get('error')}")
+        return 1
     return 0
 
 
-def cmd_clean_cache(cfg):
-    ensure_dirs(cfg)
-    log = setup_logging(cfg)
-    targets = [Path(cfg.pipeline.cache.dir)] + [ROOT / s.output_dir for s in STAGES]
+def _clean_artifacts(cfg):
+    """Clear cache + stage output artifacts; preserve valid checkpoints.
+
+    Returns (cleaned, removed_files, preserved) so callers can report.
+    Task 27: data/checkpoints is never auto-cleaned, so a stopped run can
+    always resume.
+    """
+    targets = [Path(cfg.pipeline.cache.dir)] + [ROOT / s.output_dir
+                                                for s in STAGES]
     removed_files = 0
     cleaned = []
     for target in targets:
@@ -136,17 +132,27 @@ def cmd_clean_cache(cfg):
             except OSError:
                 pass
         cleaned.append(str(target))
-    checkpoint = Path(cfg.pipeline.state.dir) / "checkpoints.json"
-    removed_state = False
-    if checkpoint.exists():
-        checkpoint.unlink()
-        removed_state = True
+    checkpoint_dir = Path(cfg.pipeline.checkpoints.dir)
+    preserved = [str(p) for p in checkpoint_dir.rglob("checkpoints.json")]
+    return cleaned, removed_files, preserved
+
+
+def cmd_clean_cache(cfg):
+    ensure_dirs(cfg)
+    log = setup_logging(cfg)
+    cleaned, removed_files, preserved = _clean_artifacts(cfg)
     print("MangaExplainer - clean-cache")
     print(f"  cleared         : {', '.join(cleaned)}")
     print(f"  files deleted   : {removed_files}")
-    print(f"  checkpoint reset: {'yes' if removed_state else 'already clean'}")
-    print("  protected       : input/, config/, state/, logs/, pipeline/, tests/, tools/")
-    log.info("clean-cache done: %d files removed", removed_files)
+    if preserved:
+        print("  checkpoints kept: " + ", ".join(preserved) +
+              "  (never auto-deleted, resume-safe)")
+    else:
+        print("  checkpoints kept: none present yet (data/checkpoints/ preserved)")
+    print("  protected       : input/, config/, state/, data/checkpoints/, "
+          "logs/, pipeline/, tests/, tools/")
+    log.info("clean-cache done: %d files removed (checkpoints preserved)",
+             removed_files)
     return 0
 
 
@@ -322,6 +328,16 @@ def cmd_knowledge(cfg, page_num, force):
     index = load_index(cfg)
     entry = next((e for e in index["pages"] if e["page"] == page_num), None)
     print(f"  index           : {entry}")
+    # Remember what this page revealed (best-effort; never blocks the stage):
+    # project memory + recent-pages window so character names survive resumes
+    # and even a new PDF in the same project.
+    try:
+        from pipeline.context_memory import remember_project
+        remembered = remember_project(cfg, page_num)
+        if remembered:
+            print("  memory          : project + last-pages context updated")
+    except Exception:
+        pass
     return 0
 
 
@@ -796,6 +812,181 @@ def cmd_quality(cfg, video):
     return 0
 
 
+def cmd_match(cfg, page_num, all_pages, force):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.narration_matching import (
+        NarrationMatcher,
+        consolidated_path,
+        consolidate_mapping,
+    )
+    matcher = NarrationMatcher(cfg)
+    print("MangaExplainer - match (panel <-> narration mapping, Task 10)")
+    if page_num is not None and not all_pages:
+        result = matcher.run_page(page_num, force=force)
+        if result["result"] == "error":
+            print(f"  page           : {result['page']}")
+            print(f"  result         : ERROR - {result['message']}")
+            return 1
+        print(f"  page           : {result['page']}")
+        if result["result"] == "skipped":
+            print("  result         : skipped (already matched)")
+        else:
+            print(f"  result         : {result['result']} "
+                  f"({result.get('segment_count', 0)} segment(s) <-> "
+                  f"{result.get('panel_count', 0)} panel(s), "
+                  f"{result.get('unmatched_panels', 0)} unmatched)")
+        print(f"  mapping file   : {result.get('mapping_file')}")
+        for warning in result.get("warnings") or []:
+            print(f"  warning        : {warning}")
+        return 0
+
+    result = matcher.run_all(force=force)
+    print(f"  mode           : {'all pages (force rebuild)' if force else 'all pages (resume)'}")
+    if result["pages"]:
+        print(f"  result         : matched {result['pages_done']}, "
+              f"skipped {result['pages_skipped']}, failed {result['pages_failed']}")
+        for row in result["pages"]:
+            marker = "MATCHED" if row["result"] == "ok" else row["result"].upper()
+            extra = ""
+            if row.get("segment_count") is not None:
+                extra = f"  ({row['segment_count']} segs, {row.get('unmatched_panels')} unmatched)"
+            if row.get("reason"):
+                extra = f"  - {row['reason']}"
+            if row.get("message"):
+                extra = f"  - {row['message']}"
+            print(f"    page {row['page']:<4} [{marker}]{extra}")
+    else:
+        print(f"  result         : ERROR - {result.get('message')}")
+        return 1
+    if result["pages_done"] and not result["pages_failed"]:
+        try:
+            merged = consolidate_mapping(cfg)
+            print(f"  consolidated   : {consolidated_path(cfg)}")
+            print(f"    panels      : {merged['total_panels']}")
+            print(f"    segments    : {merged['total_segments']}")
+            print(f"    unmatched   : {merged['total_unmatched_panels']}")
+        except Exception as exc:
+            print(f"  consolidated   : skipped - {exc}")
+    return 0 if not result["pages_failed"] else 1
+
+
+def cmd_pipeline(cfg, force):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.run_pipeline import run_pipeline
+    print("MangaExplainer - pipeline (Task 26, complete chain: Manga -> final MP4)")
+    print("  (low-RAM, sequential, checkpointed; resumes from last completed "
+          "step; no subtitles)")
+    result = run_pipeline(cfg, ROOT, force=force)
+    print("\nPipeline summary:")
+    for row in result["report"]:
+        status = (row.get("status") or "unknown").upper()
+        skipped = " (skipped)" if row.get("skipped") else ""
+        print(f"    {row['name']:<18} {status}{skipped}")
+    if result["status"] == "error":
+        print(f"\n  PIPELINE ERROR: {result.get('error')}")
+        print("  Stopped. Fix the error and re-run `pipeline` to resume from "
+              f"here ({result.get('current')}).")
+        return 1
+    return 0
+
+
+def cmd_pipeline_resume(cfg):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.run_pipeline import run_pipeline
+    print("MangaExplainer - pipeline resume (continue from last completed step)")
+    result = run_pipeline(cfg, ROOT, force=False)
+    if result["status"] == "error":
+        print(f"\n  PIPELINE ERROR: {result.get('error')}")
+        return 1
+    return 0
+
+
+def cmd_pipeline_status(cfg):
+    ensure_dirs(cfg)
+    from state import State
+    from pipeline.run_pipeline import STAGE_NAMES, PIPELINE_STAGES
+    state = State(STAGE_NAMES, Path(cfg.pipeline.checkpoints.dir))
+    total = len(STAGE_NAMES)
+    rows = {r["name"]: r["status"] for r in state.summary()}
+    print("MangaExplainer - pipeline status (Task 26 chain)")
+    print(f"  checkpoint     : {state.path}")
+    print(f"  progress       : {state.completed_count()}/{total} stages "
+          f"({round(100 * state.completed_count() / total)}%)")
+    width = max(len(name) for name in STAGE_NAMES)
+    for name, label in PIPELINE_STAGES:
+        print(f"    {name:<{width}}  {rows.get(name, 'pending')}  ({label})")
+    nxt = state.next_pending()
+    print(f"  next stage     : {nxt or '(none - complete)'}")
+    return 0
+
+
+def cmd_start(cfg, force=False):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.run_pipeline import run_pipeline
+    print("MangaExplainer - start (complete chain: Manga -> final MP4)")
+    if force:
+        print("  mode            : FORCE — rebuilding every stage from scratch")
+    result = run_pipeline(cfg, ROOT, force=force)
+    if result["status"] == "error":
+        print(f"\n  START ERROR: {result.get('error')}")
+        print("  Stopped. Fix the error and re-run `start`/`resume` to "
+              "continue from here (completed work is skipped).")
+        return 1
+    return 0
+
+
+def cmd_check(cfg):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    from pipeline.quality_check import QualityCheckError, check_quality
+    print("MangaExplainer - check")
+    try:
+        report = check_quality(cfg, ROOT, low_ram=True)
+    except QualityCheckError as exc:
+        print(f"  result         : ERROR - {exc}")
+        return 1
+    status = report["status"]
+    print(f"  result         : {status.upper()}")
+    print(f"  errors         : {report.get('error_count', 0)}")
+    for c in report["checks"]:
+        mark = "PASS" if c["passed"] else ("FAIL" if c["critical"] else "warn")
+        print(f"    [{mark}] {c['check']:22s} {c['detail']}")
+    return 0 if status in ("ok", "warning") else 1
+
+
+def cmd_clean(cfg):
+    ensure_dirs(cfg)
+    setup_logging(cfg)
+    # Shares the artifact cleaner with clean-cache; valid checkpoints preserved.
+    cleaned, removed_files, preserved = _clean_artifacts(cfg)
+    print("MangaExplainer - clean")
+    print(f"  cleared         : {', '.join(cleaned)}")
+    print(f"  files deleted   : {removed_files}")
+    if preserved:
+        print("  checkpoints kept: " + ", ".join(preserved) +
+              "  (never auto-deleted, resume-safe)")
+    else:
+        print("  checkpoints kept: none present yet (data/checkpoints/ preserved)")
+    print("  protected       : input/, config/, state/, data/checkpoints/, "
+          "logs/, pipeline/, tests/, tools/")
+    return 0
+
+
+def cmd_ui(port, config):
+    """Launch the user-friendly browser dashboard for MangaExplainer.
+
+    Runs the zero-dependency web UI in-process (no separate process), so you
+    can drive the whole pipeline — full run, per-stage tools, PDF, voice
+    demo, and the result video — from one page in the browser.
+    """
+    import webui
+    webui.serve(host="127.0.0.1", port=port, config=config)
+
+
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -815,7 +1006,7 @@ def build_parser():
     sub.add_parser(
         "clean-cache",
         parents=[common],
-        help="delete derived artifacts, cache and checkpoints",
+        help="delete derived artifacts and cache (checkpoints are preserved)",
     )
     extract = sub.add_parser(
         "extract", parents=[common], help="extract a single page from the PDF to an image"
@@ -1002,6 +1193,25 @@ def build_parser():
     crops.add_argument(
         "--force", action="store_true", help="recompute even if already done"
     )
+    match_p = sub.add_parser(
+        "match",
+        parents=[common],
+        help="build the deterministic panel <-> narration mapping for one "
+             "page, or for all pages",
+    )
+    match_p.add_argument(
+        "--page", type=int, default=None,
+        help="1-based page number to match (default: --all)",
+    )
+    match_p.add_argument(
+        "--all", action="store_true",
+        help="match every page with a panels manifest, one at a time "
+             "(resumes past completed pages)",
+    )
+    match_p.add_argument(
+        "--force", action="store_true",
+        help="rebuild even if a page is already matched",
+    )
     motion = sub.add_parser(
         "motion",
         parents=[common],
@@ -1082,6 +1292,56 @@ def build_parser():
         "--video", metavar="PATH", default=None,
         help="video to check (default: output/final_video.mp4)",
     )
+    pipeline_p = sub.add_parser(
+        "pipeline",
+        parents=[common],
+        help="run the complete chain: Manga -> ... -> final MP4 (Task 26)",
+    )
+    pipeline_p.add_argument(
+        "--force", action="store_true",
+        help="re-run already-completed stages (default: resume, never repeat "
+             "completed work)",
+    )
+    sub.add_parser(
+        "pipeline-resume",
+        parents=[common],
+        help="resume the complete pipeline from the last completed stage",
+    )
+    sub.add_parser(
+        "pipeline-status",
+        parents=[common],
+        help="show progress of the complete pipeline (Task 26 chain)",
+    )
+    # --- Task 28: simple user-facing CLI --------------------------------
+    start = sub.add_parser(
+        "start",
+        parents=[common],
+        help="run the complete pipeline (Manga -> final MP4); by default "
+             "skips completed work, with --force rebuilds everything",
+    )
+    start.add_argument(
+        "--force", action="store_true",
+        help="rebuild every stage from scratch, ignoring completed checkpoints",
+    )
+    sub.add_parser(
+        "check",
+        parents=[common],
+        help="quality-check the output video (output/final_video.mp4)",
+    )
+    sub.add_parser(
+        "clean",
+        parents=[common],
+        help="clear cache and derived artifacts (checkpoints are preserved)",
+    )
+    ui = sub.add_parser(
+        "ui",
+        parents=[common],
+        help="open the user-friendly browser dashboard",
+    )
+    ui.add_argument(
+        "--port", type=int, default=8000,
+        help="port for the local web dashboard (default: 8000)",
+    )
     return parser
 
 
@@ -1122,6 +1382,8 @@ def main(argv=None):
         return cmd_plan(cfg, args.page, args.scene, args.force)
     if args.command == "crops":
         return cmd_crops(cfg, args.page, args.scene, args.force)
+    if args.command == "match":
+        return cmd_match(cfg, args.page, args.all, args.force)
     if args.command == "motion":
         return cmd_motion(cfg, args.page, args.scene, args.force,
                           args.keyframes)
@@ -1133,11 +1395,24 @@ def main(argv=None):
         return cmd_export(cfg, args.low_ram, args.fps)
     if args.command == "quality-check":
         return cmd_quality(cfg, args.video)
+    if args.command == "pipeline":
+        return cmd_pipeline(cfg, args.force)
+    if args.command == "pipeline-resume":
+        return cmd_pipeline_resume(cfg)
+    if args.command == "pipeline-status":
+        return cmd_pipeline_status(cfg)
+    if args.command == "ui":
+        return cmd_ui(args.port, getattr(args, "config", None))
     commands = {
         "status": cmd_status,
         "resume": cmd_resume,
+        "start": cmd_start,
+        "check": cmd_check,
+        "clean": cmd_clean,
         "clean-cache": cmd_clean_cache,
     }
+    if args.command == "start":
+        return commands["start"](cfg, getattr(args, "force", False))
     return commands[args.command](cfg)
 
 

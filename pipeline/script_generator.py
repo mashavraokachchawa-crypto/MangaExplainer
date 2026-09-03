@@ -291,6 +291,30 @@ class ScriptGenerator:
                 return provider
 
             prompt = build_script_prompt(scene_doc, dialogue, context)
+
+            # Durable project memory + recent-pages window + rich memory
+            # archive (all optional): the narrator stays consistent across the
+            # whole volume, and on resume / a new PDF it still remembers what
+            # it already learned (incl. user corrections and story events).
+            try:
+                from .context_memory import manga_memory_block, script_context
+                memory_block, window_block = script_context(cfg)
+                rich_block = manga_memory_block(
+                    cfg, page=page, task="narration", limit=8,
+                    extra_text=" ".join(context.get(pid, {}).get("characters", [])
+                                        for pid in (scene_doc.get("panel_ids") or []))
+                    if context else None,
+                )
+                if memory_block or window_block or rich_block:
+                    prompt = build_script_prompt(
+                        scene_doc, dialogue, context,
+                        memory_block=memory_block, window_block=window_block,
+                        manga_memory_block=rich_block)
+            except Exception:  # memory is best-effort; never fail scripting
+                logging.getLogger(__name__).warning(
+                    "script context memory unavailable; continuing without it",
+                    exc_info=True,
+                )
             raw = None
             try:
                 raw = provider.generate(

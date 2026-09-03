@@ -13,6 +13,7 @@ from pathlib import Path
 STATE_FILE = "checkpoints.json"
 STATE_VERSION = 1
 PENDING, RUNNING, COMPLETED, FAILED = "pending", "running", "completed", "failed"
+INPUT_FINGERPRINT_KEY = "input_fingerprint"
 PAGE_EXTRACTED = "extracted"
 OCR_COMPLETED = "ocr_completed"
 VLM_COMPLETED = "vlm_completed"
@@ -161,6 +162,56 @@ class State:
         row["status"] = PENDING
         self._save()
 
+    # -- input fingerprint ---------------------------------------------------
+    # Records a short hash of the source PDF so a *new* PDF (a fresh upload)
+    # invalidates stale completed checkpoints and forces the pipeline to
+    # re-run from extract_pages instead of pretending it is already done.
+
+    def input_fingerprint(self):
+        return self._data.get(INPUT_FINGERPRINT_KEY)
+
+    def set_input_fingerprint(self, fingerprint):
+        self._data[INPUT_FINGERPRINT_KEY] = fingerprint
+        self._save()
+
+    def invalidate_completed(self):
+        """Mark every completed stage pending so the pipeline re-runs them."""
+        changed = False
+        for row in self._data["stages"]:
+            if row["status"] == COMPLETED:
+                row["status"] = PENDING
+                row["started_at"] = None
+                row["completed_at"] = None
+                changed = True
+        if changed:
+            self._save()
+        return changed
+
+    def recover_interrupted(self):
+        """Demote any stage left 'running' by a dead process to 'pending'.
+
+        A stage is marked 'running' and then completed/failed synchronously in
+        the SAME process. If we ever load this state and see a 'running' stage,
+        the previous process died before finishing it (a crash, an OOM kill, a
+        SIGKILL'ed server) — it never completed AND never failed. Leaving it
+        'running' would make the dashboard show a permanent zombie stage that
+        blocks a clean resume, so we normalize it back to 'pending' so the next
+        run picks it up from the top of that stage.
+
+        No-op if nothing is in the interrupted state. Returns True if any row
+        was recovered.
+        """
+        changed = False
+        for row in self._data["stages"]:
+            if row["status"] == RUNNING:
+                row["status"] = PENDING
+                row["started_at"] = None
+                row["completed_at"] = None
+                changed = True
+        if changed:
+            self._save()
+        return changed
+
     def next_pending(self):
         for row in self._data["stages"]:
             if row["status"] in (PENDING, RUNNING, FAILED):
@@ -178,6 +229,10 @@ class State:
             {"name": row["name"], "status": row["status"]}
             for row in self._data["stages"]
         ]
+
+    def details(self):
+        """Per-stage rows with timestamps (name, status, started_at, completed_at)."""
+        return [dict(row) for row in self._data["stages"]]
 
     def page_status(self, page_key):
         pages = self._data.get("pages") or {}

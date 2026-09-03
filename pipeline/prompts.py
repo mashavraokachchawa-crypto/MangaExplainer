@@ -89,6 +89,35 @@ Rules:
 - Return ONLY the narration text: no "narration:" prefix, no surrounding
   quotes, no markdown, no JSON, no scene metadata."""
 
+def build_chapter_summary_prompt(chapter, context):
+    """Prompt for a detailed chapter summary (chronological explanation).
+
+    chapter: a chapter dict from the knowledge DB.
+    context: compact text of events/characters for this chapter.
+    """
+    num = chapter.get("chapter_number", "?")
+    title = chapter.get("title", "Untitled")
+    start = chapter.get("pdf_page_start")
+    end = chapter.get("pdf_page_end")
+    return f"""You are summarizing a chapter of a manga for a study guide.
+
+CH. {num}: {title} (pages {start}–{end})
+
+Stored events from this chapter (chronological, may be incomplete/noisy):
+{context}
+
+Write a DETAILED, natural, chronological explanation of this chapter:
+
+- HERO/KEY MOMENTS: the most important events in order.
+- CHARACTERS: who is important here, what they do/decide.
+- REVEALS: any secrets, identities, or information revealed.
+- UNRESOLVED: mysteries or threads opened but not resolved.
+- CONNECTIONS: how this links to earlier or later events.
+
+Return ONLY the explanation text (no headings required, no JSON).
+Be specific and natural — a knowledgeable storyteller, not a plot recap."""
+
+
 SCENE_HEADER = """Scene: {scene_id}
 Characters present: {characters}
 Location(s): {locations}
@@ -194,6 +223,17 @@ Location(s): {locations}
 Event(s): {events}
 Scene summary: {summary}"""
 
+NATURALIZATION_RULES = """Writing style - read this aloud before you answer:
+- Write like a YouTuber explaining the manga to a friend, not like a subtitle
+  or a translation of the OCR text. You are explaining, so use connective,
+  spoken phrasing ("So what happens here is", "Now here's the twist").
+- Prefer short, punchy sentences the way people actually speak. Vary rhythm.
+- Cut filler ("um", "basically") unless it genuinely sounds natural.
+- Never echo the raw OCR dialogue verbatim; if a line matters, paraphrase it
+  into your own spoken words.
+- Read your narration aloud in your head: if any sentence sounds stiff,
+  stilted, or like it was written down rather than spoken, rewrite it."""
+
 PANEL_FACTS = """Panels in reading order (first to last):
 {lines}"""
 
@@ -205,13 +245,21 @@ def _facts(values, fallback="-"):
     return ", ".join(kept) if kept and any(kept) else fallback
 
 
-def build_script_prompt(scene, dialogue_by_panel=None, panel_context=None):
+def build_script_prompt(scene, dialogue_by_panel=None, panel_context=None,
+                        memory_block=None, window_block=None,
+                        manga_memory_block=None, naturalize=True):
     """Prompt for a whole scene's segmented narration script.
 
     scene: scene dict from scenes/<page>_scenes.json.
     dialogue_by_panel: optional {panel_id: ocr text}.
     panel_context: optional {panel_id: {characters, event}} so the LLM can
         choose visual intents from the available panel information.
+    memory_block: optional durable project memory (characters/places/facts)
+        fed to the narrator so it stays consistent across the whole volume.
+    window_block: optional recent-pages context (last understood pages) so
+        the narrator keeps short-range continuity.
+    manga_memory_block: optional rich Manga Memory Engine block (story events,
+        user corrections, world facts) with confidence annotations.
     """
     dialogue_by_panel = dialogue_by_panel or {}
     panel_context = panel_context or {}
@@ -230,6 +278,8 @@ def build_script_prompt(scene, dialogue_by_panel=None, panel_context=None):
             )
         )
     parts = [NARRATION_SEGMENT_RULES]
+    if naturalize:
+        parts.append(NATURALIZATION_RULES)
     parts.append(
         SCENE_FACTS.format(
             scene_id=scene.get("scene_id", "scene_001"),
@@ -240,4 +290,10 @@ def build_script_prompt(scene, dialogue_by_panel=None, panel_context=None):
         )
     )
     parts.append(PANEL_FACTS.format(lines="\n".join(lines)))
+    if window_block:
+        parts.append(window_block)
+    if memory_block:
+        parts.append(memory_block)
+    if manga_memory_block:
+        parts.append(manga_memory_block)
     return "\n\n".join(parts)

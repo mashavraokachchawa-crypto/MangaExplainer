@@ -15,7 +15,6 @@ STAGE_SPECS = (
     ("build_scenes", "analysis", "scenes"),
     ("write_script", "scenes", "script"),
     ("generate_audio", "script", "audio"),
-    ("build_subtitles", "audio", "subtitles"),
     ("plan_shots", "scenes", "shots"),
     ("pick_music", "shots", "music"),
     ("render_video", "shots", "output"),

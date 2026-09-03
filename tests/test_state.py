@@ -47,3 +47,32 @@ def test_unknown_stage_is_skipped_in_order(tmp_path):
     first.mark_completed("zeta")
     second = State(["alpha", "beta"], str(tmp_path))
     assert second.next_pending() == "alpha"
+
+
+def test_input_fingerprint_roundtrip(tmp_path):
+    state = State(NAMES, str(tmp_path))
+    assert state.input_fingerprint() is None
+    state.set_input_fingerprint("abc123")
+    again = State(NAMES, str(tmp_path))
+    assert again.input_fingerprint() == "abc123"
+
+
+def test_invalidate_completed_resets_done_stages(tmp_path):
+    state = State(NAMES, str(tmp_path))
+    state.mark_completed("alpha")
+    state.mark_completed("beta")
+    assert state.is_complete()
+    changed = state.invalidate_completed()
+    assert changed is True
+    assert not state.is_complete()
+    assert state.completed_count() == 0
+    assert state.next_pending() == "alpha"
+    # completed_at/started_at cleared
+    rows = {r["name"]: r for r in state.details()}
+    assert rows["alpha"]["completed_at"] is None
+    assert rows["alpha"]["started_at"] is None
+
+
+def test_invalidate_completed_noop_when_nothing_done(tmp_path):
+    state = State(NAMES, str(tmp_path))
+    assert state.invalidate_completed() is False

@@ -252,12 +252,17 @@ class OcrProcessor:
                 f"(run: python main.py panels --page {page_num} first)",
             )
 
-        img = cv2.imread(str(panel_file), cv2.IMREAD_COLOR)
+        from .panel_clean import clean_panel_source
+        read_file = clean_panel_source(
+            self.cfg, page_num, panel_num, ext=self.image_format
+        ) or panel_file
+
+        img = cv2.imread(str(read_file), cv2.IMREAD_COLOR)
         if img is None or img.size == 0:
             return self._error(
                 page_num,
                 panel_num,
-                f"cannot read or decode panel image {panel_file} (corrupt?)",
+                f"cannot read or decode panel image {read_file} (corrupt?)",
             )
 
         provider = self.provider
@@ -312,7 +317,7 @@ class OcrProcessor:
                 "page": page_num,
                 "panel": panel_num,
                 "engine": provider.name,
-                "source": self._rel(panel_file),
+                "source": self._rel(read_file),
                 "text_blocks": blocks,
                 "combined_text": combined_text,
             }
@@ -341,7 +346,7 @@ class OcrProcessor:
             "page": page_num,
             "panel": panel_num,
             "engine": provider.name,
-            "source": self._rel(panel_file),
+            "source": self._rel(read_file),
             "out_file": out_file,
             "debug_image": debug_file,
             "count": len(blocks),

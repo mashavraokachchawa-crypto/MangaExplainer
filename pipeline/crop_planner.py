@@ -39,6 +39,12 @@ LOG = logging.getLogger("mangaexplainer")
 TARGET_ASPECT = 16.0 / 9.0
 EPSILON = 1e-6
 
+# A 16:9 window smaller than this fraction of a panel's shorter side is too
+# microscopic to be a usable frame (upscaling it to 720p/1080p just produces
+# blur). Below this we keep the whole panel (letterboxed to 16:9) instead of
+# emitting a useless sliver.
+MIN_CROP_FRACTION = 0.6
+
 SUPPORTED_INTENTS = frozenset({
     "full_panel", "character_closeup", "face_closeup",
     "object_closeup", "action_crop", "smart_crop", "multi_panel",
@@ -122,6 +128,16 @@ def snap_box(box):
         int(round(x)), int(round(y)),
         int(round(w)), int(round(h)),
     )
+
+
+def _min_crop_side(width, height):
+    """Smallest usable crop side (px) for a panel of (width, height)."""
+    return MIN_CROP_FRACTION * min(width, height)
+
+
+def _too_small(box, width, height):
+    """True if a crop box is too tiny to be a usable video frame."""
+    return min(box[2], box[3]) < _min_crop_side(width, height) - EPSILON
 
 
 def is_valid_region(region, width, height):
@@ -470,6 +486,10 @@ def compute_crop(width, height, intent, regions, cfg=None):
                 and ry + rh <= box[1] + box[3] + EPSILON
             )
             if inside:
+                if _too_small(box, width, height):
+                    # The 16:9 close-up window is microscopic (e.g. 20x11 on a
+                    # ~200px panel) -> keep the whole panel, letterboxed.
+                    return (x, y, w, h), "full_panel", letterbox
                 return box, "16_9", False
             return _wider_safe_box([region], width, height, TARGET_ASPECT, padding), "safe_wider", True
 
@@ -499,6 +519,8 @@ def compute_crop(width, height, intent, regions, cfg=None):
         )
         if not inside:
             return _wider_safe_box(critical, width, height, TARGET_ASPECT, padding), "safe_wider", True
+    if _too_small(box, width, height):
+        return (x, y, w, h), "full_panel", letterbox
     return box, "16_9", False
 
 
@@ -666,7 +688,10 @@ class CropPlanner:
             crops_dir.mkdir(parents=True, exist_ok=True)
             fmt = self._image_format()
             shot_image = crops_dir / f"{shot_id}.{fmt}"
-            cv2.imwrite(str(shot_image), cropped, self._jpeg_params())
+            out_img = self._letterbox_to_target(cropped, target_w, target_h) \
+                if letterbox and not self._is_target_aspect(cropped, target_w, target_h) \
+                else cropped
+            cv2.imwrite(str(shot_image), out_img, self._jpeg_params())
             payload["out_image"] = str(shot_image)
 
             if self._debug_enabled():
@@ -689,6 +714,30 @@ class CropPlanner:
             }
         finally:
             del image
+
+    def _is_target_aspect(self, img, target_w, target_h):
+        ih, iw = img.shape[:2]
+        cur = iw / ih if ih else TARGET_ASPECT
+        return abs(cur - (target_w / target_h)) <= 0.01
+
+    def _letterbox_to_target(self, img, target_w, target_h):
+        """Scale `img` to fit inside a target-ratio canvas, centring it.
+
+        The whole artwork is preserved (aspect held) and the letterbox/pillarbox
+        bars fill the remainder. This guarantees a true 16:9 frame with no
+        distortion, so the renderer's resize-to-16:9 never stretches the art.
+        """
+        ih, iw = img.shape[:2]
+        if iw <= 0 or ih <= 0:
+            return img
+        scale = min(target_w / float(iw), target_h / float(ih))
+        nw = max(1, int(round(iw * scale)))
+        nh = max(1, int(round(ih * scale)))
+        resized = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_AREA)
+        canvas = np.zeros((target_h, target_w, 3), dtype=np.uint8)
+        ox, oy = (target_w - nw) // 2, (target_h - nh) // 2
+        canvas[oy:oy + nh, ox:ox + nw] = resized
+        return canvas
 
     def _image_format(self):
         crops_cfg = getattr(self.cfg, "crops", None)

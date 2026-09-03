@@ -71,11 +71,13 @@ class NarrationManifestRunner:
 
     # -- Task 14 -----------------------------------------------------------
 
-    def generate(self, segments, out_dir, state=None, force=False):
+    def generate(self, segments, out_dir, state=None, force=False,
+                 on_progress=None):
         """Synthesize one WAV per segment into out_dir; returns the manifest.
 
         segments: list of narration segment dicts in pipeline order.
         out_dir:  directory for audio/segment_NNN.wav + audio/manifest.json.
+        on_progress: optional callable(done, total) invoked per segment.
         """
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -94,6 +96,19 @@ class NarrationManifestRunner:
                     provider.synth(text, out_path, target_seconds=None)
                     gc.collect()
                     duration = wav_duration(out_path)
+
+                if on_progress is not None:
+                    try:
+                        on_progress(index + 1, len(segments),
+                                    seg_id=seg_id, text=text,
+                                    duration=duration, audio_path=str(out_path))
+                    except TypeError:
+                        try:
+                            on_progress(index + 1, len(segments))
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
 
                 entry = {
                     "segment_id": seg_id,

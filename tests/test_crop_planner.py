@@ -187,11 +187,15 @@ def test_portrait_panel(tmp_path):
     write_timeline(cfg, [shot(intent="smart_crop")])
     result, _ = run(cfg)
     assert result["result"] == "ok"
-    crop = result["shots"][0]["crop"]
+    entry = result["shots"][0]
+    crop = entry["crop"]
     assert_in_bounds((crop["x"], crop["y"], crop["width"], crop["height"]), 300, 600)
-    # A 16:9 window inside a portrait panel is width-limited.
+    # A 16:9 window inside a portrait panel is a thin width-limited strip that
+    # is too small to be usable, so the whole panel is kept (letterboxed).
+    assert entry["strategy"] == "full_panel"
+    assert entry["letterbox"] is True
     assert crop["width"] == 300
-    assert abs(crop["height"] - 300 / AR) <= 1
+    assert crop["height"] == 600
 
 
 # ------------------------------------------------------------- required: face
@@ -207,7 +211,9 @@ def test_face_near_edge(tmp_path):
     result, _ = run(cfg)
     assert result["result"] == "ok"
     entry = result["shots"][0]
-    assert entry["strategy"] == "16_9"
+    # The face close-up window (max(40,50*AR) x 50) is far below the
+    # minimum usable size, and the panel is already 16:9 -> keep it whole.
+    assert entry["strategy"] == "full_panel"
     assert entry["letterbox"] is False
     crop = (entry["crop"]["x"], entry["crop"]["y"], entry["crop"]["width"], entry["crop"]["height"])
     assert_in_bounds(crop, 640, 360)
@@ -224,7 +230,10 @@ def test_character_near_edge(tmp_path):
     write_timeline(cfg, [shot(intent="character_closeup")])
     result, _ = run(cfg)
     entry = result["shots"][0]
-    assert entry["strategy"] == "16_9"
+    # Character close-up window is too small to upscale cleanly; the panel is
+    # already 16:9 so the whole frame is kept (sharp, no distortion).
+    assert entry["strategy"] == "full_panel"
+    assert entry["letterbox"] is False
     crop = (entry["crop"]["x"], entry["crop"]["y"], entry["crop"]["width"], entry["crop"]["height"])
     assert_in_bounds(crop, 640, 360)
     assert contains(crop, (590, 300, 45, 55))
@@ -439,10 +448,12 @@ def state_not_marked(cfg):
 
 
 def test_compute_crop_frame_math():
+    # A portrait panel is too small for a usable 16:9 window (300x168 < 60%
+    # of its shorter side), so it is kept whole and letterboxed to 16:9.
     box, strategy, letterbox = compute_crop(300, 600, "smart_crop", [])
-    assert strategy == "16_9"
-    assert letterbox is False
-    assert abs(aspect(box) - AR) < 0.001
+    assert strategy == "full_panel"
+    assert letterbox is True
+    assert box == (0.0, 0.0, 300.0, 600.0)
     assert_in_bounds(box, 300, 600)
 
 

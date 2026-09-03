@@ -1,7 +1,6 @@
-"""Pipeline package: ordered stage stubs plus the crash-safe runner."""
+"""Pipeline package: ordered stage specs and the live pipeline stages."""
 
 from pipeline.base import Stage
-from pipeline.runner import PipelineRunner
 from pipeline.stages import STAGES, STAGE_NAMES
 
-__all__ = ["Stage", "PipelineRunner", "STAGES", "STAGE_NAMES"]
+__all__ = ["Stage", "STAGES", "STAGE_NAMES"]

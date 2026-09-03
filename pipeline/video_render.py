@@ -3,21 +3,22 @@
 Renders the final video from:
    * manga panels            (visuals/panels_manifest.json image paths)
    * panel motion (Task 17)  (motion/render_plan.json Ken Burns keyframes)
-   * transitions (Task 18)   (fade / crossfade / cut)
    * final audio (Task 21)   (audio/final_mix.wav)
 into an H.264 MP4 at the configured resolution (default 1920x1080).
 
+Transitions were REMOVED from the pipeline (panels are hard-cut only). The
+renderer still tolerates legacy plans that carry a "transitions" key so old
+artifacts keep rendering, but new plans never produce one and every shot is
+a cut.
 Design (lightweight, low-RAM):
    * panels are processed SEQUENTIALLY, one shot at a time
    * motion is a smooth source-rect resampled from the Ken Burns keyframes
-   * transitions (fade/cut/crossfade) are applied at shot boundaries and are
-     dependent on the timeline timing
    * each rendered frame is written as a temp JPEG to a temp dir on disk (so
-     at most one frame lives in RAM), then ffmpeg encodes the image sequence
-     and muxes the final mix audio, keeping A/V in sync via the audio timeline
+      at most one frame lives in RAM), then ffmpeg encodes the image sequence
+      and muxes the final mix audio, keeping A/V in sync via the audio timeline
    * temporary files are cleaned up automatically afterwards
    * hardware acceleration is used only if the requested codec is supported
-     and the runtime reports it; otherwise it falls back to CPU encoding
+      and the runtime reports it; otherwise it falls back to CPU encoding
    * LOW_RAM_MODE (env var) or render.low_ram_mode keep the whole chapter out
      of memory (one panel / one frame at a time)
 
@@ -232,12 +233,14 @@ def find_active(tl, transitions, t):
 
 # ------------------------------------------------------------ render loop
 def render_video(cfg, root, out_path=None, low_ram=None, cleanup=True,
-                 codec=None, crf=None, fps_override=None):
+                 codec=None, crf=None, fps_override=None, on_progress=None):
     """Render the final video from the motion plan + final audio.
 
     Returns a summary dict. Frames are written to a temp dir (one at a time),
     ffmpeg encodes to the output and muxes the final mix; temp files are
     removed automatically afterwards.
+
+    on_progress: optional callable(done, total) invoked as frames render.
     """
     import cv2
     root = Path(root)
@@ -332,6 +335,11 @@ def render_video(cfg, root, out_path=None, low_ram=None, cleanup=True,
             cv2.imwrite(str(frame_path), out_img,
                         [cv2.IMWRITE_JPEG_QUALITY, 90])
             frame_idx += 1
+            if on_progress is not None:
+                try:
+                    on_progress(frame_idx, total_frames)
+                except Exception:
+                    pass
             if low_ram and frame_idx % 10 == 0:
                 gc.collect()
     finally:

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 
 LOG = logging.getLogger(__name__)
@@ -297,7 +298,20 @@ def _load_timelines(cfg, root, page_nums=None):
         except (OSError, json.JSONDecodeError):
             continue
         page = doc.get("page")
-        scene = doc.get("scene_id")
+        # Timeline carries a numeric 'scene' and a string 'scene_id' (e.g.
+        # "scene_001"). Some producers write scene_id as a bare int. Normalise
+        # all three forms so int(scene) below never sees a non-numeric value.
+        scene = doc.get("scene")
+        if scene is None:
+            sid = doc.get("scene_id")
+            if isinstance(sid, (int, float)) and not isinstance(sid, bool):
+                scene = int(sid)
+            else:
+                m = re.search(r"scene_(\d+)$", str(sid or ""))
+                if not m and str(sid or "").strip().isdigit():
+                    scene = int(str(sid).strip())
+                else:
+                    scene = int(m.group(1)) if m else None
         if page is None or scene is None:
             continue
         if page_nums is not None and int(page) not in [int(p) for p in page_nums]:
